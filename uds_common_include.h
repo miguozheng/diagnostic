@@ -4,8 +4,8 @@
 //#include "myprint.h"
 #include "string.h"
 #include "stdio.h"
-#include "usd_interface_internal.h"
-#include "usd_interface_ext.h"
+#include "uds_interface_internal.h"
+#include "uds_interface_ext.h"
 
 
 #define		UDS_PRINTF		printf//Debug output

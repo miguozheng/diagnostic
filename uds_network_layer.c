@@ -25,7 +25,7 @@ const  UDS_N_Timing_Parameter_t Time_config =
 	.N_Cr = 1000,
 };
 //Rx 
-static UDS_N_FC_Para_t 		Rx_FC_para = {20,20};
+static UDS_N_FC_Para_t 		Rx_FC_para = {50,20};
 //Tx 
 static UDS_N_FC_Para_t 		Tx_FC_para = {20,20};
 //Time control
@@ -33,7 +33,7 @@ static UDS_N_Count_Status_t Time_Man[N_TIME_NAME_N_ALL];
 //CAN PDU pool
 static UDS_N_PDU_Pool_t 	PDU_pool[UDS_N_CAN_PDU_POOL_MAX];
 //Service issue pool
-UDS_N_Services_Issue_t	 	Issue_pool[UDS_N_SERVICE_ISSUE_POOL_MAX];
+static UDS_N_Services_Issue_t	 	Issue_pool[UDS_N_SERVICE_ISSUE_POOL_MAX];
 
 //slist
 static Slist 				Put_data_rx_slist; 
@@ -49,31 +49,13 @@ static UDS_N_Control_t		Network_ctl =
 
 };
 //CAN recive buffer manage
-uds_uint8_t								 USD_can_rx_buf_man[UDS_N_CAN_RX_BUFFER_NUM];
+static uds_uint8_t								 USD_can_rx_buf_man[UDS_N_CAN_RX_BUFFER_NUM];
 //CAN recive buffer
-UDS_N_Rx_Buffer_t						 USD_can_rx_buffer[UDS_N_CAN_RX_BUFFER_NUM];
+static UDS_N_Rx_Buffer_t						 USD_can_rx_buffer[UDS_N_CAN_RX_BUFFER_NUM];
 //UDS buffer
 static uds_uint8_t 						 USD_rx_buffer[UDS_N_RX_BUFFER_MAX];
-//UDS SF buffer
-static uds_uint8_t 						 USD_rx_SF_buffer[SF_DATA_LENGTH];
-//Network N_USData.Request
-static UDS_N_USData_Request_t 			 USData_Request;
-//Network N_USData.Confirm
-static UDS_N_USData_Confirm_t 			 USData_Confirm;
-//Network N_USData.FF_Indication
-static UDS_N_USData_FF_Indication_t 	 USData_FF_Indication;
-//Network N_USData.indication
-static UDS_N_USData_Indication_t 		 USData_Indication;
-//Network N_USData.Parameters_Request
-static UDS_N_Change_Parameters_Request_t Change_Parameters_Request;
-//Network N_USData.Parameters_Confirm
-static UDS_N_Change_Parameters_Confirm_t Change_Parameters_Confirm;
 //Temp data
 static UDS_N_Services_t					 Network_service;
-//Temp sf data
-static UDS_N_Services_t					 Network_SF_service;
-//Resever FC frame
-static UDS_N_Frame_t					 Reciver_FC_frame;
 
 
 //
@@ -236,16 +218,15 @@ static void UDS_N_pool_init(void)
 	memset(pool,0,sizeof(Issue_pool));
 	memset(USD_can_rx_buffer,0,sizeof(USD_can_rx_buffer));
 	memset(USD_rx_buffer,0,sizeof(USD_rx_buffer));
-	memset(USD_rx_SF_buffer,0,sizeof(USD_rx_SF_buffer));
 }
 
 //list init
 static void UDS_N_slist_init(void)
 {
 	slist_init(&Put_data_rx_slist,50);
-	slist_init(&Put_data_tx_slist,20);
-	slist_init(&Issue_upper_slist,10);
-	slist_init(&Issue_nework_slist,10);
+	slist_init(&Put_data_tx_slist,10);
+	slist_init(&Issue_upper_slist,5);
+	slist_init(&Issue_nework_slist,2);
 	slist_init(&Can_send_slist,20);
 }
 
@@ -284,8 +265,6 @@ void UDS_N_time_manage_handle(void)
 			}else{
 				ptime->Status = N_TIME_CNT_STS_TIMEOUT;
 			}
-		}else{
-			ptime->Status = N_TIME_CNT_STS_STOP;
 		}
 	}
 }
@@ -572,6 +551,9 @@ static uds_int8_t UDS_N_issue_to_upper_put(UDS_N_Service_e type,
 	//make node and insert
 	if(ret){
 		ret = UDS_N_add_node_to_list(plist,(void *)tpool);
+		if(1 != ret){
+			UDS_N_pool_pointer_free(N_POOL_TYPE_ISSUE,tpool);
+		}
 	}else{
 		UDS_N_pool_pointer_free(N_POOL_TYPE_ISSUE,tpool);
 	}
@@ -621,6 +603,9 @@ static uds_int8_t UDS_N_issue_to_network_put(UDS_N_Service_e type,
 	//make node and insert
 	if(ret){
 		ret = UDS_N_add_node_to_list(plist,(void *)tpool);
+		if(1 != ret){
+			UDS_N_pool_pointer_free(N_POOL_TYPE_ISSUE,tpool);
+		}
 	}else{
 		UDS_N_pool_pointer_free(N_POOL_TYPE_ISSUE,tpool);
 	}
@@ -648,10 +633,10 @@ static uds_int8_t UDS_N_add_node_to_list(Slist *list,void *data)
 		if(0 == slist_is_full(plist)){//list not full
 			slist_node_insert_queue(plist,pnode);
 			ret = 1;
+		}else{
+			slist_node_free(pnode);
 		}
-	}else{
-		UDS_N_pool_pointer_free(N_POOL_TYPE_PDU,(UDS_N_PDU_Pool_t *)pdata);
-	}	
+	}
 
 	return ret;
 }
@@ -672,7 +657,6 @@ uds_int8_t UDS_N_can_data_put(uds_uint32_t id,
 {
 	UDS_N_PDU_Pool_t	*tpool = UDS_N_pool_pointer_get(N_POOL_TYPE_PDU);
 	uds_int8_t ret = -1,i,*pdata = data;
-	Snode *pnode = UDS_NULL;
 	Slist *plist = &Put_data_rx_slist;
 
 	if((!tpool) || (!pdata)){
@@ -695,6 +679,9 @@ uds_int8_t UDS_N_can_data_put(uds_uint32_t id,
 	}
 	//make node and insert
 	ret = UDS_N_add_node_to_list(plist,(void *)tpool);
+	if(1 != ret){
+		UDS_N_pool_pointer_free(N_POOL_TYPE_PDU,tpool);
+	}
 	
 	return ret;
 }
@@ -763,7 +750,6 @@ static uds_int8_t UDS_N_generate_USData_indication(UDS_N_Services_t *service,
 		return ret;
 	}
 
-	ret = 0;
 #ifdef ADDRESS_EXTENSION_MODE
 	pindication->USData_Indication.Info.N_AE		 = data_pdu->N_AE;
 #endif
@@ -782,22 +768,21 @@ static uds_int8_t UDS_N_generate_USData_indication(UDS_N_Services_t *service,
 static uds_int8_t UDS_N_generate_USData_FF_indication(UDS_N_PDU_t *pdu)
 {
 	uds_int8_t ret = -1;
+	UDS_N_Service_Info_Pub_t *data_info = UDS_N_rx_ctl_sevice_info_get();
 	UDS_N_PDU_t *data_pdu = pdu;
 	UDS_N_Services_t *pindication = &Network_service;
-	uds_uint16_t i;
 
 	if(!data_pdu){
 		return ret;
 	}
 
-	ret = 0;
 #ifdef ADDRESS_EXTENSION_MODE
-	pindication->USData_FF_indication.Info.N_AE		 = 0;
+	pindication->USData_FF_indication.Info.N_AE		 = data_info->N_AE;
 #endif
-	pindication->USData_FF_indication.Info.Mtype	 = MTYPE_DIAGNOSTICS;
-	pindication->USData_FF_indication.Info.N_SA		 = data_pdu->ID;
-	pindication->USData_FF_indication.Info.N_TA		 = UDS_DIAGNOSTICS_SELF_ID;
-	pindication->USData_FF_indication.Info.N_TAtype	 = N_TATYPE_PHYSICAL;
+	pindication->USData_FF_indication.Info.Mtype	 = data_info->Mtype;
+	pindication->USData_FF_indication.Info.N_SA		 = data_info->N_SA;
+	pindication->USData_FF_indication.Info.N_TA		 = data_info->N_TA;
+	pindication->USData_FF_indication.Info.N_TAtype	 = data_info->N_TAtype;
 	pindication->USData_FF_indication.Length 		 = data_pdu->Frame.FF.PCI_Bit.DL_MSB * 256 + data_pdu->Frame.FF.DL_LSB;
 	ret = 1;
 
@@ -816,7 +801,6 @@ static uds_int8_t UDS_N_generate_USData_confirm(UDS_N_Services_t *service,
 	  return ret;
 	}
 
-	ret = 0;
 #ifdef ADDRESS_EXTENSION_MODE
 	pconfirm->USData_confirm.Info.N_AE	   = pservice_info->N_AE;
 #endif
@@ -1297,9 +1281,8 @@ static uds_int8_t UDS_N_push_to_can_send_list(void *data)
 	}
 
 	//make node and insert
-	if(ret){
-		ret = UDS_N_add_node_to_list(plist,(void *)pdata);
-	}else{
+	ret = UDS_N_add_node_to_list(plist,(void *)pdata);
+	if(1 != ret){
 		ret = UDS_N_pool_pointer_free(N_POOL_TYPE_PDU,pdata);
 	}
 	
@@ -1330,16 +1313,18 @@ static uds_int8_t UDS_N_rx_send_FC_frame(UDS_N_FC_Ctl_e fc)
 	switch(fc){
 		case N_FC_CTS:
 			frame_FC->FC.PCI_Bit.FS = N_FC_CTS;
+			ret = 1;
 			break;
 		case N_FC_WT:
 			frame_FC->FC.PCI_Bit.FS = N_FC_WT;
+			ret = 1;
 			break;
 		case N_FC_OVLFW:
 			frame_FC->FC.PCI_Bit.FS = N_FC_OVLFW;
+			ret = 1;
 			break;
 		default:break;
 	}
-	ret = 1;
 	//push to send buffer 
 	if(1 == ret){
 		frame_FC->FC.BS = para->BS;
@@ -1360,7 +1345,7 @@ static uds_int8_t UDS_N_rx_push_data_to_buffer(uds_uint8_t *data,
 	uds_int8_t ret = -1;
 	uds_uint16_t pointer_target = pnetwork_ctl->Rx_frame_ctl.Buffer_pointer_target;
 
-	if((!pdata) || (!length)){
+	if((!pdata) || (!length) || (!rx_buffer)){
 		return ret;
 	}
 
@@ -1408,7 +1393,7 @@ static uds_int8_t UDS_N_rx_SF_deal(void *pdata)
 {
 	uds_int8_t ret = -1;
 	UDS_N_PDU_t *data_pdu = (UDS_N_PDU_t *)pdata;
-	uds_uint8_t length = data_pdu->Frame.SF.PCI_Bit.DL,i;
+	uds_uint8_t length,*buf = UDS_NULL;;
 	UDS_N_Control_t *pnetwork_ctl = &Network_ctl;
 
 	if(!data_pdu){
@@ -1416,25 +1401,34 @@ static uds_int8_t UDS_N_rx_SF_deal(void *pdata)
 	}
 
 	ret = 0;
+	length = data_pdu->Frame.SF.PCI_Bit.DL;
 	if((0 < length)
 		&&(SF_DATA_LENGTH >= length)){//check length
-		//push data to buffer
-		for(i = 0;i < length;i++){
-			USD_rx_SF_buffer[i] = data_pdu->Frame.SF.N_Data[i];
-			pnetwork_ctl->Rx_frame_ctl.Buffer_pointer_current++;
-		}
+		UDS_N_rx_ctl_clear();
+		UDS_N_rx_info_clear();
+		//init recive ctl
+		UDS_N_rx_ctl_reset_for_new(length);
+		//push SF data to buffer
+		ret = UDS_N_rx_push_data_to_buffer(data_pdu->Frame.SF.N_Data,length);
+
 		pnetwork_ctl->Rx_service_info.Mtype = MTYPE_DIAGNOSTICS;
-		pnetwork_ctl->Rx_service_info.N_SA = UDS_DIAGNOSTICS_PHYSICAL_ID;
-		pnetwork_ctl->Rx_service_info.N_TA = data_pdu->ID;
+		pnetwork_ctl->Rx_service_info.N_SA = data_pdu->ID;
+		pnetwork_ctl->Rx_service_info.N_TA = UDS_DIAGNOSTICS_PHYSICAL_ID;
 		pnetwork_ctl->Rx_service_info.N_TAtype = N_TATYPE_PHYSICAL;
 		#ifdef ADDRESS_EXTENSION_MODE	
 		pnetwork_ctl->Rx_service_info.N_AE = 0;
 		#endif
+		buf = UDS_N_get_can_recive_buf(pnetwork_ctl->Rx_frame_ctl.Index_buf);
 		//issue upper layer
-		ret = UDS_N_generate_USData_indication(&Network_SF_service,
-											   N_OK,
-											   USD_rx_SF_buffer);
-		ret = UDS_N_issue_to_upper_put(N_USDATA_INDICATION,&Network_SF_service);
+		if(1 == ret){
+			ret = UDS_N_generate_USData_indication(&Network_service,
+												   N_OK,
+												   buf);
+			if(1 == ret){
+				ret = UDS_N_issue_to_upper_put(N_USDATA_INDICATION,&Network_service);
+			
+			}
+		}
 	}
 	UDS_N_rx_ctl_clear();
 	UDS_N_rx_info_clear();
@@ -1445,7 +1439,7 @@ static uds_int8_t UDS_N_rx_unexpected_SF_deal(void *pdata)
 {
 	uds_int8_t ret = -1;
 	UDS_N_PDU_t *data_pdu = (UDS_N_PDU_t *)pdata;
-	uds_uint8_t length = data_pdu->Frame.SF.PCI_Bit.DL,*buf = UDS_NULL;
+	uds_uint8_t length,*buf = UDS_NULL;
 	UDS_N_Control_t *pnetwork_ctl = &Network_ctl;
 
 	if(!data_pdu){
@@ -1453,6 +1447,7 @@ static uds_int8_t UDS_N_rx_unexpected_SF_deal(void *pdata)
 	}
 
 	ret = 0;
+	length = data_pdu->Frame.SF.PCI_Bit.DL;
 	if((0 < length)
 		&&(SF_DATA_LENGTH >= length)){//check length
 		//stop timer Cr
@@ -1465,7 +1460,9 @@ static uds_int8_t UDS_N_rx_unexpected_SF_deal(void *pdata)
 		ret = UDS_N_generate_USData_indication(&Network_service,
 											   N_UNEXP_PDU,
 											   buf);
-		ret = UDS_N_issue_to_upper_put(N_USDATA_INDICATION,&Network_service);
+		if(1 == ret){
+			ret = UDS_N_issue_to_upper_put(N_USDATA_INDICATION,&Network_service);
+		}
 		UDS_N_rx_ctl_clear();
 		UDS_N_rx_info_clear();
 	}
@@ -1479,6 +1476,7 @@ static uds_int8_t UDS_N_rx_FF_deal(void *pdata)
 	UDS_N_PDU_t *data_pdu = (UDS_N_PDU_t *)pdata;
 	uds_uint16_t length;
 	UDS_N_FC_Ctl_e send_FC_flag = N_FC_NONE;
+	UDS_N_Control_t *pnetwork_ctl = &Network_ctl;
 
 	if(!data_pdu){
 		return ret;
@@ -1494,6 +1492,13 @@ static uds_int8_t UDS_N_rx_FF_deal(void *pdata)
 			UDS_N_rx_info_clear();
 			//init recive ctl
 			UDS_N_rx_ctl_reset_for_new(length);
+			pnetwork_ctl->Rx_service_info.Mtype = MTYPE_DIAGNOSTICS;
+			pnetwork_ctl->Rx_service_info.N_SA = data_pdu->ID;
+			pnetwork_ctl->Rx_service_info.N_TA = UDS_DIAGNOSTICS_PHYSICAL_ID;
+			pnetwork_ctl->Rx_service_info.N_TAtype = N_TATYPE_PHYSICAL;
+			#ifdef ADDRESS_EXTENSION_MODE	
+			pnetwork_ctl->Rx_service_info.N_AE = 0;
+			#endif
 			//push FF data to buffer
 			ret |= UDS_N_rx_push_data_to_buffer(data_pdu->Frame.FF.N_Data,FF_DATA_LENGTH);
 			//issue upper layer
@@ -1540,7 +1545,9 @@ static uds_int8_t UDS_N_rx_unexpected_FF_deal(void *pdata)
 		ret = UDS_N_generate_USData_indication(&Network_service,
 											   N_UNEXP_PDU,
 											   buf);
-		ret = UDS_N_issue_to_upper_put(N_USDATA_INDICATION,&Network_service);
+		if(1 == ret){
+			ret = UDS_N_issue_to_upper_put(N_USDATA_INDICATION,&Network_service);
+		}
 		UDS_N_rx_ctl_clear();
 		UDS_N_rx_info_clear();
 	}
@@ -1554,7 +1561,6 @@ static uds_int8_t UDS_N_rx_CF_deal(void *pdata)
 	UDS_N_PDU_t *data_pdu = (UDS_N_PDU_t *)pdata;
 	uds_uint8_t ctl_sn,r_sn,*buf = UDS_NULL;
 	UDS_N_FC_Ctl_e send_FC_flag = N_FC_NONE;
-	uds_uint16_t length;
 	UDS_N_Control_t *pnetwork_ctl = &Network_ctl;
 
 	if(!data_pdu){
@@ -1583,15 +1589,18 @@ static uds_int8_t UDS_N_rx_CF_deal(void *pdata)
 			//set FC flag
 			send_FC_flag = N_FC_NONE;
 			//generate USData.indication
-			length = UDS_N_rx_ctl_get_target_frame();
 			//get buf
 			buf = UDS_N_get_can_recive_buf(pnetwork_ctl->Rx_frame_ctl.Index_buf);
 			ret = UDS_N_generate_USData_indication(&Network_service,
 												   N_OK,
 												   buf);
-			ret = UDS_N_issue_to_upper_put(N_USDATA_INDICATION,&Network_service);
-			//set Rx contrl status
-			ret = UDS_N_rx_ctl_set_status(N_STS_RX_IDLE);
+			if(1 == ret){
+				ret = UDS_N_issue_to_upper_put(N_USDATA_INDICATION,&Network_service);
+				if(1 == ret){
+					//set Rx contrl status
+					ret = UDS_N_rx_ctl_set_status(N_STS_RX_IDLE);
+				}
+			}
 			UDS_N_time_ctl_stop(N_TIME_NAME_N_Cr);
 		}
 		//send flow control frame
@@ -1602,13 +1611,16 @@ static uds_int8_t UDS_N_rx_CF_deal(void *pdata)
 		//get buf
 		buf = UDS_N_get_can_recive_buf(pnetwork_ctl->Rx_frame_ctl.Index_buf);
 		//generate USData.indication
-		length = UDS_N_rx_ctl_get_current_frame();
 		ret = UDS_N_generate_USData_indication(&Network_service,
 											   N_WRONG_SN,
 											   buf);
-		ret = UDS_N_issue_to_upper_put(N_USDATA_INDICATION,&Network_service);
-		//set rx status
-		ret = UDS_N_rx_ctl_set_status(N_STS_RX_IDLE);	
+		if(1 == ret){
+			ret = UDS_N_issue_to_upper_put(N_USDATA_INDICATION,&Network_service);
+			if(1 == ret){
+				//set rx status
+				ret = UDS_N_rx_ctl_set_status(N_STS_RX_IDLE);
+			}
+		}
 	}
 
 	return ret;
@@ -1741,10 +1753,10 @@ static uds_int8_t UDS_N_tx_FC_OVLFW_deal(void *pdata)
 	//set send status
 	UDS_N_tx_ctl_set_status(N_STS_TX_TRANSMIT_FINISH);
 	//generate failed USData.confirm
-	ret = UDS_N_generate_USData_confirm((UDS_N_Services_t *)&USData_Confirm,N_BUFFER_OVFLW);
+	ret = UDS_N_generate_USData_confirm(&Network_service,N_BUFFER_OVFLW);
 	//issue to upper layer
 	if(1 == ret){
-		UDS_N_issue_to_upper_put(N_USDATA_CONFIRM,(UDS_N_Services_t *)&USData_Confirm);
+		UDS_N_issue_to_upper_put(N_USDATA_CONFIRM,&Network_service);
 	}
 
 	//
@@ -1786,10 +1798,10 @@ static uds_int8_t UDS_N_tx_FC_deal(void *pdata)
 		//set send status
 		UDS_N_tx_ctl_set_status(N_STS_TX_TRANSMIT_FINISH);
 		//generate failed USData.confirm
-		ret = UDS_N_generate_USData_confirm((UDS_N_Services_t *)&USData_Confirm,N_INVALID_FS);
+		ret = UDS_N_generate_USData_confirm(&Network_service,N_INVALID_FS);
 		//issue to upper layer
 		if(1 == ret){
-			UDS_N_issue_to_upper_put(N_USDATA_CONFIRM,(UDS_N_Services_t *)&USData_Confirm);
+			UDS_N_issue_to_upper_put(N_USDATA_CONFIRM,&Network_service);
 		}
 	}
 
@@ -1800,13 +1812,14 @@ static uds_int8_t UDS_N_rx_message_process_normal(void *pdata)
 {
 	uds_int8_t ret = -1;
 	UDS_N_PDU_t *data_pdu = (UDS_N_PDU_t *)pdata;
-	uds_uint8_t pci_type = data_pdu->Frame.PCI.PCI_Bit.PCItype;
+	uds_uint8_t pci_type;
 	
 	if(!data_pdu){
 		return ret;
 	}
 
 	ret = 0;
+	pci_type = data_pdu->Frame.PCI.PCI_Bit.PCItype;
 	switch(pci_type){
 		case N_PDU_NAME_SF:
 			ret = UDS_N_rx_SF_deal(pdata);
@@ -1832,12 +1845,12 @@ static uds_int8_t UDS_N_rx_message_process_muilt_frame(void *pdata)
 	ret = 0;
 	switch(data_pdu->Frame.PCI.PCI_Bit.PCItype){
 		case N_PDU_NAME_SF:
-			ret = UDS_N_rx_unexpected_SF_deal(data_pdu);
-			ret = UDS_N_rx_SF_deal(data_pdu);
+			ret |= UDS_N_rx_unexpected_SF_deal(data_pdu);
+			ret |= UDS_N_rx_SF_deal(data_pdu);
 			break;
 		case N_PDU_NAME_FF:
-			ret = UDS_N_rx_unexpected_FF_deal(data_pdu);
-			ret = UDS_N_rx_FF_deal(data_pdu);
+			ret |= UDS_N_rx_unexpected_FF_deal(data_pdu);
+			ret |= UDS_N_rx_FF_deal(data_pdu);
 			break;
 		case N_PDU_NAME_CF:
 			ret = UDS_N_rx_CF_deal(data_pdu);
@@ -2006,13 +2019,11 @@ uds_int8_t UDS_N_service_process_USData_request(void *pdata)
 {
 	UDS_N_USData_Request_t *pmessage = (UDS_N_USData_Request_t *)pdata;
 	uds_int8_t ret = -1;
-	uds_uint16_t i;
 
 	if((!pmessage) || (UDS_N_RX_BUFFER_MAX < pmessage->Length) || UDS_N_ctl_service_is_busy()){
 		return ret;
 	}
 
-	ret = 0;
 	//issue to network
 	ret = UDS_N_issue_to_network_put(N_USDATA_REQUEST,(UDS_N_Services_t *)pmessage);
 	if(1 == ret){
@@ -2066,8 +2077,6 @@ static void UDS_N_service_deal(void)
 }
 static void UDS_N_rx_FC_send_result_hook(uds_int8_t res)
 {
-	uds_int8_t ret = -1;
-	
 	//change rx ctl status
 	//UDS_N_tx_ctl_set_status(N_STS_TX_TRANSMIT_FINISH);
 	if(1 == res){//send ok
@@ -2090,10 +2099,10 @@ static void UDS_N_tx_SF_send_result_hook(uds_int8_t res)
 		//change tx ctl status
 		UDS_N_tx_ctl_set_status(N_STS_TX_TRANSMIT_FINISH);
 		//generate sccuess USData.confirm
-		ret = UDS_N_generate_USData_confirm((UDS_N_Services_t *)&USData_Confirm,N_OK);
+		ret = UDS_N_generate_USData_confirm(&Network_service,N_OK);
 		//issue to upper layer
 		if(1 == ret){
-			UDS_N_issue_to_upper_put(N_USDATA_CONFIRM,(UDS_N_Services_t *)&USData_Confirm);
+			UDS_N_issue_to_upper_put(N_USDATA_CONFIRM,&Network_service);
 		}
 	}else{
 		//generate failed USData.confirm
@@ -2102,8 +2111,6 @@ static void UDS_N_tx_SF_send_result_hook(uds_int8_t res)
 }
 static void UDS_N_tx_FF_send_result_hook(uds_int8_t res)
 {
-	uds_int8_t ret = -1;
-	
 	if(1 == res){//send ok
 		//stop timer As
 		UDS_N_time_ctl_stop(N_TIME_NAME_N_As);
@@ -2138,10 +2145,10 @@ static void UDS_N_tx_CF_send_result_hook(uds_int8_t res)
 			//set status
 			UDS_N_tx_ctl_set_status(N_STS_TX_TRANSMIT_FINISH);
 			//generate USData.confirm
-			ret = UDS_N_generate_USData_confirm((UDS_N_Services_t *)&USData_Confirm,N_OK);
+			ret = UDS_N_generate_USData_confirm(&Network_service,N_OK);
 			//issue to upper layer
 			if(1 == ret){
-				UDS_N_issue_to_upper_put(N_USDATA_CONFIRM,(UDS_N_Services_t *)&USData_Confirm);
+				UDS_N_issue_to_upper_put(N_USDATA_CONFIRM,&Network_service);
 			}
 		}else{
 			if(UDS_N_tx_ctl_BS_is_finish()){//segment package is finish
@@ -2182,9 +2189,8 @@ static uds_int8_t UDS_N_tx_generate_SF_frame(void **res)
 		return ret;
 	}
 
-	ret = 0;
 	temp = UDS_N_tx_ctl_buffer_pointer_target_get();
-	pdu->PDU.ID = pservice_info->N_SA;
+	pdu->PDU.ID = UDS_DIAGNOSTICS_SELF_ID;//pservice_info->N_SA;
 	pdu->PDU.Length = 8;
 	pdu->PDU.Frame.SF.PCI_Bit.PCItype = N_PDU_NAME_SF;
 	pdu->PDU.Frame.SF.PCI_Bit.DL = temp;
@@ -2211,9 +2217,8 @@ static uds_int8_t UDS_N_tx_generate_FF_frame(void **res)
 		return ret;
 	}
 
-	ret = 0;
 	temp = UDS_N_tx_ctl_buffer_pointer_target_get();
-	pdu->PDU.ID = pservice_info->N_SA;
+	pdu->PDU.ID = UDS_DIAGNOSTICS_SELF_ID;//pservice_info->N_SA;
 	pdu->PDU.Length = 8;
 	pdu->PDU.Frame.FF.PCI_Bit.PCItype = N_PDU_NAME_FF;
 	pdu->PDU.Frame.FF.DL_LSB = temp & 0x00FF;
@@ -2240,8 +2245,7 @@ static uds_int8_t UDS_N_tx_generate_CF_frame(void **res)
 		return ret;
 	}
 
-	ret = 0;
-	pdu->PDU.ID = pservice_info->N_SA;
+	pdu->PDU.ID = UDS_DIAGNOSTICS_SELF_ID;//pservice_info->N_SA;
 	pdu->PDU.Length = 8;
 	pdu->PDU.Frame.CF.PCI_Bit.PCItype = N_PDU_NAME_CF;
 	pdu->PDU.Frame.CF.PCI_Bit.SN = sn_last + 1;
@@ -2377,10 +2381,10 @@ static void UDS_N_As_time_out_reply(void)
 			//set status
 			UDS_N_tx_ctl_set_status(N_STS_TX_TRANSMIT_FINISH);
 			//generate failed USData.confirm
-			ret = UDS_N_generate_USData_confirm((UDS_N_Services_t *)&USData_Confirm,N_TIMEOUT_A);
+			ret = UDS_N_generate_USData_confirm(&Network_service,N_TIMEOUT_A);
 			//issue to upper layer
 			if(1 == ret){
-				UDS_N_issue_to_upper_put(N_USDATA_CONFIRM,(UDS_N_Services_t *)&USData_Confirm);
+				UDS_N_issue_to_upper_put(N_USDATA_CONFIRM,&Network_service);
 			}
 		}
 	}
@@ -2415,10 +2419,10 @@ static void UDS_N_Bs_time_out_reply(void)
 			//set status
 			UDS_N_tx_ctl_set_status(N_STS_TX_TRANSMIT_FINISH);
 			//generate failed USData.confirm
-			ret = UDS_N_generate_USData_confirm((UDS_N_Services_t *)&USData_Confirm,N_TIMEOUT_Bs);
+			ret = UDS_N_generate_USData_confirm(&Network_service,N_TIMEOUT_Bs);
 			//issue to upper layer
 			if(1 == ret){
-				UDS_N_issue_to_upper_put(N_USDATA_CONFIRM,(UDS_N_Services_t *)&USData_Confirm);
+				UDS_N_issue_to_upper_put(N_USDATA_CONFIRM,&Network_service);
 			}
 		}
 	}
@@ -2503,7 +2507,7 @@ static uds_int8_t UDS_N_service_data_copy(UDS_N_Services_t *des,
 										  UDS_N_Services_Issue_t *res,
 										  uds_uint8_t *buf)
 {
-	uds_uint8_t *pres,*pdes,*pmessage;
+	uds_uint8_t *pres,*pdes;
 	uds_int8_t ret = -1;
 	uds_uint16_t i;
 	
@@ -2573,7 +2577,7 @@ uds_uint8_t UDS_N_service_get(UDS_N_Services_t *res,uds_uint8_t *buf)
 *
 * @return	   None
 **********************************************************************/
-void usd_network_all(void)
+void uds_network_all(void)
 {
 	//N_USData 
 	UDS_N_service_deal();

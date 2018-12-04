@@ -1,7 +1,7 @@
 #ifndef SLIST_H_
 #define SLIST_H_
 
-#define SLIST_LENGTH_MAX  200//链表最大长度
+#define SLIST_LENGTH_MAX  100//链表最大长度
 #define SLIST_NULL  0
 typedef struct snode
 {
@@ -31,4 +31,6 @@ void slist_node_insert_after(Slist *pdlist,Snode *posnode,Snode *pnodein);
 Snode *slist_node_make(void *pdata);
 void slist_node_insert_queue(Slist *pdlist,Snode *pnodein);
 Snode *slist_malloc_mem(void);
+void slist_node_free(Snode *pnode);
+
 #endif /* SLIST_H_ */

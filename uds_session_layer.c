@@ -8,7 +8,6 @@
 */
 #include "uds_common_include.h"
 #include "uds_struct.h"
-#include "uds_network_layer.h"
 #include "slist.h"
 /*************************1*****************************************************
 Private global variables and functions
@@ -16,18 +15,18 @@ Private global variables and functions
 //Time parameter config
 const  UDS_S_Timing_Parameter_t Session_Time_config = 
 {
-
+	0,
+	0,
+	2000,
+	2000,
+	0,
+	0,
+	0,
+	10000,
+	10000
 };
 //Time control
 static UDS_S_Count_Status_t Session_Time_Man[S_TIME_NAME_ALL];
-
-//Session control
-UDS_S_Control_t Session_ctl = 
-{
-
-};
-
-
 /*
 ============================================================================
  Function declear
@@ -143,7 +142,7 @@ static void UDS_S_time_manage_init(void)
 	uds_uint16_t *config = (uds_uint16_t *)&Session_Time_config;
 	uds_uint8_t i;
 
-	for(i = 0;i < N_TIME_NAME_N_ALL;i++,ptime++){
+	for(i = 0;i < S_TIME_NAME_ALL;i++,ptime++){
 		ptime->Cnt = 0;
 		ptime->Status = S_TIME_CNT_STS_IDLE;
 		ptime->Cnt_en = 0;
@@ -227,8 +226,6 @@ void UDS_S_time_manage_handle(void)
 			}else{
 				ptime->Status = S_TIME_CNT_STS_TIMEOUT;
 			}
-		}else{
-			ptime->Status = S_TIME_CNT_STS_STOP;
 		}
 	}
 }
@@ -269,7 +266,7 @@ uds_int8_t UDS_S_init(void)
 *
 * @return	   None.
 **********************************************************************/
-void usd_session_all(void)
+void uds_session_all(void)
 {
 
 }

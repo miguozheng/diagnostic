@@ -21,8 +21,10 @@ static uds_uint8_t UDS_run_enable = 0;//enable uds run.
 */
 static void (*uds_network_time_manage_handle)(void);
 static void (*uds_session_time_manage_handle)(void);
-static void (*usd_network_proc)(void);
-static void (*usd_session_proc)(void);
+static void (*uds_network_proc)(void);
+static void (*uds_session_proc)(void);
+static void (*uds_application_proc)(void);
+
 static uds_int8_t (*uds_can_data_push)(uds_uint32_t id,
 									   uds_uint8_t length,
 									   uds_uint8_t *data);
@@ -40,7 +42,7 @@ static void uds_self_regist(void)
 	UDS_Interface_In_t *inf = (UDS_Interface_In_t *)get_uds_internal_interface();
 
 	if(inf->Network.main_proc){
-		usd_network_proc = inf->Network.main_proc;
+		uds_network_proc = inf->Network.main_proc;
 	}else{
 		ret |= -1;
 	}
@@ -55,12 +57,17 @@ static void uds_self_regist(void)
 		ret |= -1;
 	}
 	if(inf->Session.main_proc){
-		usd_session_proc = inf->Network.main_proc;
+		uds_session_proc = inf->Session.main_proc;
 	}else{
 		ret |= -1;
 	}
 	if(inf->Session.time_manage_handle){
-		uds_session_time_manage_handle = inf->Network.time_manage_handle;
+		uds_session_time_manage_handle = inf->Session.time_manage_handle;
+	}else{
+		ret |= -1;
+	}
+	if(inf->Application.main_proc){
+		uds_application_proc = inf->Application.main_proc;
 	}else{
 		ret |= -1;
 	}
@@ -101,6 +108,16 @@ void uds_init(void)
 		UDS_run_enable |= 0x01;
 	}
 	//appliacation service init
+	if(inf->Application.init){
+		ret = inf->Application.init();
+		if(1 != ret){
+			UDS_PRINTF("UDS Error:Application layer init failed!\n\r");
+		}
+	}
+	if(1 != ret){
+		//Forbidden run uds
+		UDS_run_enable |= 0x01;
+	}
 
 	//self regist
 	uds_self_regist();
@@ -128,11 +145,11 @@ void uds_proc_main(void)
 {
 	if(!UDS_run_enable){
 		//network layer process
-		usd_network_proc();
+		uds_network_proc();
 		//session layer process
-		usd_session_proc();
+		uds_session_proc();
 		//appliacation service
-
+		uds_application_proc();
 	}
 }
 

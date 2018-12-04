@@ -6,10 +6,17 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <sys/epoll.h>
+#include <netdb.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
+
 
 #include "uds.h"
 #include "uds_network_layer.h"
 #include "uds_session_layer.h"
+#include "uds_application_layer.h"
+
 
 /***************************************************************************************************************************************************
 *
@@ -22,106 +29,88 @@
 *varlue declear
 *
 ****************************************************************************************************************************************************/
+pthread_t id1,id2,id3,id4,id5,id_accpet;
 
-unsigned char data_send0[8] = {0x10,0x2B,'B','o','o','m',',','a'};
-unsigned char data_send1[8] = {0x21,' ','n','e','w',' ','m','u'};
-unsigned char data_send2[8] = {0x22,'l','i','t','-','f','r','a'};
-unsigned char data_send3[8] = {0x23,'m','e',' ','m','e','s','s'};
-unsigned char data_send4[8] = {0x24,'a','g','e',' ','i','s',' '};
-unsigned char data_send5[8] = {0x25,'r','e','c','i','v','e','d'};
-unsigned char data_send6[8] = {0x26,'!',0,0,0,0,0,0};
+unsigned char server_mode = 0;
+int server_sockfd = -1;
+int client_sockfd = -1;
+int s_client_sockfd = -1;
+int accpet_r = -1;
+struct sockaddr_in server_addr;
+struct sockaddr_in client_addr;
 
-unsigned char data_send7[8] = {0x10,0x38,'W','h','e','n',' ','I'};
-unsigned char data_send8[8] = {0x21,' ','f','e','e','l',' ','t'};
-unsigned char data_send9[8] = {0x22,'h','e',' ','s','k','y',' '};
-unsigned char data_send10[8] = {0x23,'m','i','g','h','t',' ','f'};
-unsigned char data_send11[8] = {0x24,'a','l','l',' ','a','n','d'};
-unsigned char data_send12[8] = {0x25,' ','n','o',' ','o','n','e'};
-unsigned char data_send13[8] = {0x26,' ','h','e','a','r',' ','m'};
-unsigned char data_send14[8] = {0x27,'y',' ','c','a','l','l','.'};
-unsigned char data_send15[8] = {0x28,0,0,0,0,0,0,0};
+typedef struct {
+	unsigned long id;
+	unsigned char length;
+	unsigned char data[8];
+}CAN_frame_t;
 
-unsigned char data_send16[8] = {0x07,'S','F',' ','M','e','s',0};
+typedef union {
+	CAN_frame_t frame;
+	unsigned char data[sizeof(CAN_frame_t)];
+}CAN_frame;
 
 
-unsigned char send_flag = 0;
+unsigned char sdefault_session[] = {0x10,0x01,0x00,0x00,0x00,0x00,0x00,0x00};
+unsigned char sd_session[] = {0x11,0x01,0x00,0x00,0x00,0x00,0x00};
 
-unsigned char *data_list[] = {
-	data_send0,
-	data_send1,
-	data_send2,
-	data_send3,
-	data_send4,
-/*	data_send7,
-	data_send8,
-	data_send9,
-	data_send10,
-	data_send11,
-	data_send12,
-	data_send13,
-//	data_send14,
-//	data_send15	
-*/
-	data_send5,
-	data_send6
-
-};
-
-unsigned char *data_list1[] = {
-	data_send7,
-	data_send8,
-	data_send9,
-	data_send10,
-	data_send11,
-	data_send12,
-	data_send13,
-	data_send14,
-	data_send15
-};
 
 UDS_N_USData_Request_t usdata_request[] = 
 {
+
 {
-{0x01,0x02,0x03,0x04},
-"The handling of the P2CAN_Client and P2 CAN_Server timing is identical to the handling as described in 6.3.5.2.1 and 6.3.5.2.2, the only exception being that the reload values on the client side and the resulting time the server shall send its final response time might differ. This is based on the transition into a session other than the default session where different P2 CAN_Client timing parameters might apply (see DiagnosticSessionControl (10 hex) service in 9.2.1 for details on how the timing parameters are reported to the client).",
-600
+	{0x01,0x02,0x03,0x04},
+	sdefault_session,
+	2
+},
+
+{
+	{0x01,0x02,0x03,0x04},
+	sd_session,
+	2
+},
+
+{
+	{0x01,0x02,0x03,0x04},
+	"The handling of the P2CAN_Client and P2 CAN_Server timing is identical to the handling as described in 6.3.5.2.1 and 6.3.5.2.2, the only exception being that the reload values on the client side and the resulting time the server shall send its final response time might differ. This is based on the transition into a session other than the default session where different P2 CAN_Client timing parameters might apply (see DiagnosticSessionControl (10 hex) service in 9.2.1 for details on how the timing parameters are reported to the client).",
+	600
 },
 
 
 {
-{0x01,0x02,0x03,0x04},
-"There is a request message.",
-28
+	{0x01,0x02,0x03,0x04},
+	"There is a request message.",
+	28
 },
 
 {
-{0x01,0x02,0x03,0x04},
-"--Part 1: General information",
-30
+	{0x01,0x02,0x03,0x04},
+	"--Part 1: General information",
+	30
 },
 
 {
-{0x01,0x02,0x03,0x04},
-"--Part 2: Network layer services",
-33
+	{0x01,0x02,0x03,0x04},
+	"--Part 2: Network layer services",
+	33
 },
 
 {
-{0x01,0x02,0x03,0x04},
-"--Part 3: Implementation of unified diagnostic services (UDS on CAN)",
-69
+	{0x01,0x02,0x03,0x04},
+	"--Part 3: Implementation of unified diagnostic services (UDS on CAN)",
+	69
 },
 
 {
-{0x01,0x02,0x03,0x04},
-"--Part 4: Requirements for emissions-related systems",
-53
+	{0x01,0x02,0x03,0x04},
+	"--Part 4: Requirements for emissions-related systems",
+	53
 },
 
 {
-{0x01,0x02,0x03,0x04},
-"Over",
-5
+	{0x01,0x02,0x03,0x04},
+	"Over",
+	5
 },
 
 };
@@ -186,44 +175,22 @@ void thread_time_ctl(void *argv)
 }
 void thread_message_send(void *argv)
 {
-	int i = 0,frame_cnt = 0,ch = 6;
-	unsigned char data_send[8] = {0x07,'S','F',' ','M','e','s',0};
-	unsigned char **char_d;
-
-	char_d = data_list;
+	unsigned int i = 0,frame_cnt = 0,ch = 6,time_cnt = 0;
+	
 	while(1){
-		
-		if(frame_cnt >= 7){
+#if 1
+		sleep(1);
+		if(frame_cnt >= 2){
 			frame_cnt = 0;
 		}
-		i = UDS_S_service_process_USData_request((void *)&usdata_request[frame_cnt++]);
-		if(1 != i){
-			printf("USData_request failed!\n\r");
-		}
-		sleep(3);
-
-		/*
-		if(0 == send_flag){
-			printf("send FF frame\n\r");
-			send_flag = 1;
-			i = UDS_N_can_data_put(0x66,8,char_d[frame_cnt++]);
-			usleep(15000);
-		}
-		if(2 == send_flag){
-			i = UDS_N_can_data_put(0x66,8,char_d[frame_cnt++]);
-			usleep(10000);
-		}
-		if(frame_cnt > ch){
-			if(ch == 6){
-				ch = 8;
-				char_d = data_list1;
-			}else{
-				ch = 6;
-				char_d = data_list;
+		if(frame_cnt < 2){
+			i = UDS_S_service_process_USData_request((void *)&usdata_request[frame_cnt++]);
+			if(1 != i){
+				printf("USData_request failed!\n\r");
 			}
-			frame_cnt = 0;
-			sleep(5);
-		}*/
+		}
+		sleep(2);
+#endif
 	}
 }
 void thread_network_proc(void *argv)
@@ -231,7 +198,12 @@ void thread_network_proc(void *argv)
 	int i = 0;
 	
 	while(1){
-		uds_proc_main();
+		//uds_proc_main();
+		uds_network_all();
+		if(server_mode){
+			uds_session_all();
+			uds_application_all();
+		}
 		usleep(500);
 	}
 }
@@ -245,50 +217,101 @@ void thread_usd_get_proc(void *argv)
 	
 	while(1){
 		do{
-		i = UDS_S_service_get(&pservice,re_buf);
-		if(N_USDATA_INDICATION == i){
-			cnt++;
-			res = get_result_char(pservice.USData_Indication.N_Result);
-			printf("Got the %d USData.indication:\n",cnt);
-			printf("                           Mtype = %d\n",pservice.USData_Indication.Info.Mtype);
-			printf("                            N_SA = 0x%2x\n",pservice.USData_Indication.Info.N_SA);
-			printf("                            N_TA = 0x%2x\n",pservice.USData_Indication.Info.N_TA);
-			printf("                        N_TAtype = %d\n",pservice.USData_Indication.Info.N_TAtype);
-			printf("                          Length = %d\n",pservice.USData_Indication.Length);
-			printf("                        N_Result = %s\n",res);
-			printf("                     MessageData = %s\n\n\r",pservice.USData_Indication.MessageData);
-		}
-		if(N_USDATA_FF_INDICATION == i){
-			cnt++;
-			printf("Got the %d USData.FF_indication:\n",cnt);
-			printf("                           Mtype = %d\n",pservice.USData_FF_indication.Info.Mtype);
-			printf("                            N_SA = 0x%2x\n",pservice.USData_FF_indication.Info.N_SA);
-			printf("                            N_TA = 0x%2x\n",pservice.USData_FF_indication.Info.N_TA);
-			printf("                        N_TAtype = %d\n",pservice.USData_FF_indication.Info.N_TAtype);
-			printf("                          Length = %d\n",pservice.USData_FF_indication.Length);
-//			printf("                        N_Result = %d\n",pservice.USData_FF_indication.N_Result);
-//			printf("                     MessageData = %s\n\n\r",pservice.USData_FF_indication.MessageData);
-		}
-		if(N_USDATA_CONFIRM == i){
-			cnt++;
-			res = get_result_char(pservice.USData_confirm.N_Result);
-			printf("Got the %d USData.USData_confirm:\n",cnt);
-			printf("                           Mtype = %d\n",pservice.USData_confirm.Info.Mtype);
-			printf("                            N_SA = 0x%2x\n",pservice.USData_confirm.Info.N_SA);
-			printf("                            N_TA = 0x%2x\n",pservice.USData_confirm.Info.N_TA);
-			printf("                        N_TAtype = %d\n",pservice.USData_confirm.Info.N_TAtype);
-//			printf("                          Length = %d\n",pservice.USData_confirm.Length);
-			printf("                        N_Result = %s\n",res);
-//			printf("                     MessageData = %s\n\n\r",pservice.USData_confirm.MessageData);
-		}
-		
-	}while(i < N_TYPE_ERROR);
+			if(0 == server_mode){
+				i = UDS_S_service_get(&pservice,re_buf);
+			}
+//			if(N_USDATA_INDICATION == i){
+//				cnt++;
+//				res = get_result_char(pservice.USData_Indication.N_Result);
+//				printf("Got the %d USData.indication:\n",cnt);
+//				printf("                           Mtype = %d\n",pservice.USData_Indication.Info.Mtype);
+//				printf("                            N_SA = 0x%2x\n",pservice.USData_Indication.Info.N_SA);
+//				printf("                            N_TA = 0x%2x\n",pservice.USData_Indication.Info.N_TA);
+//				printf("                        N_TAtype = %d\n",pservice.USData_Indication.Info.N_TAtype);
+//				printf("                          Length = %d\n",pservice.USData_Indication.Length);
+//				printf("                        N_Result = %s\n",res);
+//				printf("                     MessageData = %s\n\n\r",pservice.USData_Indication.MessageData);
+//			}
+//			if(N_USDATA_FF_INDICATION == i){
+//				cnt++;
+//				printf("Got the %d USData.FF_indication:\n",cnt);
+//				printf("                           Mtype = %d\n",pservice.USData_FF_indication.Info.Mtype);
+//				printf("                            N_SA = 0x%2x\n",pservice.USData_FF_indication.Info.N_SA);
+//				printf("                            N_TA = 0x%2x\n",pservice.USData_FF_indication.Info.N_TA);
+//				printf("                        N_TAtype = %d\n",pservice.USData_FF_indication.Info.N_TAtype);
+//				printf("                          Length = %d\n",pservice.USData_FF_indication.Length);
+//			}
+//			if(N_USDATA_CONFIRM == i){
+//				cnt++;
+//				res = get_result_char(pservice.USData_confirm.N_Result);
+//				printf("Got the %d USData.USData_confirm:\n",cnt);
+//				printf("                           Mtype = %d\n",pservice.USData_confirm.Info.Mtype);
+//				printf("                            N_SA = 0x%2x\n",pservice.USData_confirm.Info.N_SA);
+//				printf("                            N_TA = 0x%2x\n",pservice.USData_confirm.Info.N_TA);
+//				printf("                        N_TAtype = %d\n",pservice.USData_confirm.Info.N_TAtype);
+//				printf("                        N_Result = %s\n",res);
+//			}
+		}while(i < N_TYPE_ERROR);
 		sleep(1);
 	}
 	
 }
 
-pthread_t id1,id2,id3,id4;
+void thread_server_accept(void *argv)
+{
+	socklen_t client_len = sizeof(client_addr);
+	
+	while(1){
+		accpet_r = accept(server_sockfd, (struct sockaddr *)&client_addr, &client_len);
+		usleep(1000);
+	}
+}
+
+CAN_frame server_buf;
+CAN_frame client_buf;
+
+void thread_server_proc(void *argv)
+{
+	int i = 0;
+	 // 接收连接，创建新的套接字
+	while(1){
+		if(-1 != accpet_r){
+			s_client_sockfd = accpet_r;
+			accpet_r = -1;
+		}
+		if(-1 != s_client_sockfd){
+			i = read(s_client_sockfd,server_buf.data,sizeof(CAN_frame));
+			if(0 < i){
+				printf("\nECU get a message:\n\r");
+				printf("                      ID = 0x%x\n",server_buf.frame.id);
+				printf("                    data = 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",server_buf.frame.data[0],server_buf.frame.data[1],server_buf.frame.data[2],server_buf.frame.data[3],server_buf.frame.data[4],server_buf.frame.data[5],server_buf.frame.data[6],server_buf.frame.data[7]);
+				printf("                  length = %d\n\r",server_buf.frame.length);
+				uds_can_data_put(server_buf.frame.id,server_buf.frame.length,server_buf.frame.data);
+			}
+		}
+		usleep(2000);
+	}
+}
+
+void thread_client_proc(void *argv)
+{
+	int i = 0;
+	
+	while(1){
+		i = read(client_sockfd,client_buf.data,sizeof(CAN_frame));
+		if(0 < i){
+			printf("\nTester get a message:\n\r");
+			printf("                      ID = 0x%x\n",client_buf.frame.id);
+			printf("                    data = 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",client_buf.frame.data[0],client_buf.frame.data[1],client_buf.frame.data[2],client_buf.frame.data[3],client_buf.frame.data[4],client_buf.frame.data[5],client_buf.frame.data[6],client_buf.frame.data[7]);
+			printf("                  length = %d\n\r",client_buf.frame.length);
+			uds_can_data_put(client_buf.frame.id,client_buf.frame.length,client_buf.frame.data);
+		}
+		usleep(2000);
+	}
+}
+
+
+
 void thread_start(void)
 {
 	int ret=0;
@@ -303,19 +326,37 @@ void thread_start(void)
     {
         printf("create pthread error!\n");
     }
-	ret=pthread_create(&id3,NULL,(void*)thread_message_send,NULL);
-    if(ret)
-    {
-        printf("create pthread error!\n");
-    }
 	ret=pthread_create(&id4,NULL,(void*)thread_usd_get_proc,NULL);
     if(ret)
     {
         printf("create pthread error!\n");
     }
-   //pthread_join(id1,NULL);
-   //pthread_join(id2,NULL);
+	if(server_mode){
+		ret=pthread_create(&id5,NULL,(void*)thread_server_proc,NULL);
+		if(ret)
+		{
+			printf("create pthread error!\n");
+		}
+		ret=pthread_create(&id_accpet,NULL,(void*)thread_server_accept,NULL);
+		if(ret)
+		{
+			printf("create pthread error!\n");
+		}
+	}else{
+		ret=pthread_create(&id3,NULL,(void*)thread_message_send,NULL);
+		if(ret)
+		{
+			printf("create pthread error!\n");
+		}
+		ret=pthread_create(&id5,NULL,(void*)thread_client_proc,NULL);
+		if(ret)
+		{
+			printf("create pthread error!\n");
+		}
+	}
 }
+
+
 
 
 unsigned char m_can_send_hook(unsigned long id,
@@ -326,126 +367,118 @@ unsigned char m_can_send_hook(unsigned long id,
 	res = get_frame_char(data[0]>>4);
 	int i;
 	struct timespec ts;
-/*
-	clock_gettime(CLOCK_REALTIME, &ts);
-	printf("Send frame information: %s\n",res);
-	printf("                      ID = 0x%x\n",id);
-	printf("                    data = 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",data[0],data[1],data[2],data[3],data[4],data[5],data[6],data[7]);
-	printf("                  length = %d\n\r",length);
-	printf("                    time = %d\n\r",ts.tv_nsec/1000000);
-*/
-	if(1 == send_flag){
-		send_flag = 2;
+
+//	if(server_mode){
+//		printf("\n\nECU:\n\r");
+//	}else{
+//		printf("\n\nTester:\n\r");
+//	}
+
+//	clock_gettime(CLOCK_REALTIME, &ts);
+//	printf("Send frame information: %s\n",res);
+//	printf("                      ID = 0x%x\n",id);
+//	printf("                    data = 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",data[0],data[1],data[2],data[3],data[4],data[5],data[6],data[7]);
+//	printf("                  length = %d\n\r",length);
+//	printf("                    time = %d\n\r",ts.tv_nsec/1000000);
+
+	if(server_mode){
+		server_buf.frame.id = id;
+		server_buf.frame.length = length;
+		for(i = 0;i < 8;i++){
+			server_buf.frame.data[i] = data[i];
+		}
+		write(s_client_sockfd,server_buf.data,sizeof(CAN_frame));
+	}else{
+		client_buf.frame.id = id;
+		client_buf.frame.length = length;
+		for(i = 0;i < 8;i++){
+			client_buf.frame.data[i] = data[i];
+		}
+		write(client_sockfd,&client_buf,sizeof(CAN_frame));
 	}
-	
-	i = uds_can_data_put(id,length,data);
-	
+
 	return 1;
 }
 
-
-gboolean callback_time_ctl(gpointer argv)
+int socket_server_init(void)
 {
-	uds_time_handle();
-}
-gboolean callback_thread_message_send(gpointer argv)
-{
-	int i = 0;
-
-	i = UDS_N_service_process_USData_request((void *)&usdata_request[0]);
-	if(1 != i){
-		printf("USData_request failed!\n\r");
-	}
-}
-gboolean callback_thread_network_proc(gpointer argv)
-{
-	uds_proc_main();
-}
-gboolean callback_thread_usd_get_proc(gpointer argv)
-{
-	int i = 0,cnt = 0;
-	UDS_N_Services_t pservice;
-	unsigned char *res = 0;
+	int ret = -1;
 	
-	do{
-		i = UDS_N_service_get(&pservice,re_buf);
-		if(N_USDATA_INDICATION == i){
-			cnt++;
-			res = get_result_char(pservice.USData_Indication.N_Result);
-			printf("Got the %d USData.indication:\n",cnt);
-			printf("                           Mtype = %d\n",pservice.USData_Indication.Info.Mtype);
-			printf("                            N_SA = 0x%2x\n",pservice.USData_Indication.Info.N_SA);
-			printf("                            N_TA = 0x%2x\n",pservice.USData_Indication.Info.N_TA);
-			printf("                        N_TAtype = %d\n",pservice.USData_Indication.Info.N_TAtype);
-			printf("                          Length = %d\n",pservice.USData_Indication.Length);
-			printf("                        N_Result = %s\n",res);
-			printf("                     MessageData = %s\n\n\r",pservice.USData_Indication.MessageData);
+	// 创建流套接字
+	server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	ret = server_sockfd;
+	if(-1 == server_sockfd){
+		printf("Server socket fd creat failed!\n\r");
+	}else{
+		// 设置服务器接收的连接地址和监听的端口
+		server_addr.sin_family = AF_INET;					// 指定网络套接字
+		server_addr.sin_addr.s_addr = htonl(INADDR_ANY);	// 接受所有IP地址的连接
+		server_addr.sin_port = htons(9755); 				// 绑定到 9736 端口
+		
+		// 绑定（命名）套接字
+		ret = bind(server_sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+		if(-1 == ret){
+			printf("Server bind failed!\n\r");
+		}else{
+			// 创建套接字队列，监听套接字
+			ret = listen(server_sockfd, 20);
+			if(-1 == ret){
+				printf("Server listen failed!\n\r");
+			}
 		}
-		if(N_USDATA_FF_INDICATION == i){
-			cnt++;
-			printf("Got the %d USData.FF_indication:\n",cnt);
-			printf("                           Mtype = %d\n",pservice.USData_FF_indication.Info.Mtype);
-			printf("                            N_SA = 0x%2x\n",pservice.USData_FF_indication.Info.N_SA);
-			printf("                            N_TA = 0x%2x\n",pservice.USData_FF_indication.Info.N_TA);
-			printf("                        N_TAtype = %d\n",pservice.USData_FF_indication.Info.N_TAtype);
-			printf("                          Length = %d\n",pservice.USData_FF_indication.Length);
-//			printf("                        N_Result = %d\n",pservice.USData_FF_indication.N_Result);
-//			printf("                     MessageData = %s\n\n\r",pservice.USData_FF_indication.MessageData);
-		}
-		if(N_USDATA_CONFIRM == i){
-			cnt++;
-			res = get_result_char(pservice.USData_confirm.N_Result);
-			printf("Got the %d USData.USData_confirm:\n",cnt);
-			printf("                           Mtype = %d\n",pservice.USData_confirm.Info.Mtype);
-			printf("                            N_SA = 0x%2x\n",pservice.USData_confirm.Info.N_SA);
-			printf("                            N_TA = 0x%2x\n",pservice.USData_confirm.Info.N_TA);
-			printf("                        N_TAtype = %d\n",pservice.USData_confirm.Info.N_TAtype);
-//			printf("                          Length = %d\n",pservice.USData_confirm.Length);
-			printf("                        N_Result = %s\n",res);
-//			printf("                     MessageData = %s\n\n\r",pservice.USData_confirm.MessageData);
-		}
-	}while(i < N_TYPE_ERROR);
+	}
+
+	return ret;
 }
 
-gboolean callback(gpointer arg)
+int socket_client_init(char *ip)
 {
-  struct timespec ts;
-  if(clock_gettime(CLOCK_REALTIME, &ts) == -1) {
-	  g_print("realtime error!\n");
-  }else{
-	  g_print("test time out. ts.tv_nsec = %d; ts.tv_sec = %d.\n",ts.tv_nsec,ts.tv_sec);
-  }
-}
+	int len = 0;
+	int ret = -1;
 
-GMainLoop* loop;
+    // 创建流套接字
+    client_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+ 	if(-1 == client_sockfd){
+		printf("Client socket fd creat failed!\n\r");
+	}else{
+		// 设置要连接的服务器的信息
+		client_addr.sin_family = AF_INET;			// 使用网络套接字
+		client_addr.sin_addr.s_addr = inet_addr(ip);// 服务器地址
+		client_addr.sin_port = htons(9755); 		// 服务器所监听的端口
+		len = sizeof(client_addr);
+		// 连接到服务器
+		ret = connect(client_sockfd, (struct sockaddr *)&client_addr, (socklen_t)len);
+		if(-1 == ret){
+			printf("Client connect to server failed!\n\r");
+		}
+	}
 
-void timer_test(void)
-{
-  
-  if(g_thread_supported() == 0)
-  g_threadl_init(NULL);
-  g_print("g_main_loop_new\n");
-  loop = g_main_loop_new(NULL, FALSE);
-  if(loop){
-	  printf("main loop creat ok!\n");
-  }
-  //g_timeout_add(1,callback_time_ctl,NULL);
- // g_timeout_add(5000,callback_thread_message_send,NULL);
-  g_timeout_add(1,callback_thread_network_proc,NULL);
-  //g_timeout_add(10,callback_thread_usd_get_proc,NULL);
-  g_print("g_main_loop_run\n");
-  g_main_loop_run(loop);
-  g_print("g_main_loop_unref\n");
-  g_main_loop_unref(loop);
+	return ret;
 }
 
 int main(int argc,char *argv[])
 {
+	if(1 == argc){
+		server_mode = 1;
+	}else if(2 == argc){
+		server_mode = 0;
+	}else{
+		return 0;
+	}
+
+	if(server_mode){
+		if(-1 == socket_server_init()){
+			return 0;
+		}
+	}else{
+		if(-1 == socket_client_init(argv[1])){
+			return 0;
+		}
+	}
 	uds_init();
 	printf("Init finish,start network.\n\r");
 	thread_start();
-	//timer_test();
-	printf("thread start!\n\r");
+	printf("uds start!\n\r");
 	while(1){
 	}
 

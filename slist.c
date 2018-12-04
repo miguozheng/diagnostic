@@ -35,7 +35,7 @@ Snode *slist_malloc_mem(void)
 	unsigned char i;
 	Snode *pnoderet = SLIST_NULL;
 	
-	for(i = 0;i< SLIST_LENGTH_MAX+1;i++){
+	for(i = 0;i < SLIST_LENGTH_MAX;i++){
 		if(0 == Slist_men_man[i]){
 			Slist_men_man[i] = 1;
 			pnoderet = &Slist_mem[i];
@@ -128,7 +128,7 @@ void slist_node_remove(Slist *pdlist,Snode *pnode)
 {
 	Slist *tempdlist = pdlist;
 	Snode *pnodetemp = pnode,*pprev = SLIST_NULL;
-	unsigned char i;
+	unsigned char i = 0;
 	
 	if((SLIST_NULL != tempdlist) && (SLIST_NULL != pnodetemp)){
 		if(tempdlist->Size){
@@ -140,12 +140,7 @@ void slist_node_remove(Slist *pdlist,Snode *pnode)
 						if(SLIST_NULL == pprev->Next){
 							tempdlist->Tail = pprev;
 						}
-						pnodetemp->Data = SLIST_NULL;
-						pnodetemp->Next = SLIST_NULL;
-						if(0xFF != pnodetemp->Mem_iterm){
-							Slist_men_man[pnodetemp->Mem_iterm] = 0;
-						}
-						pnodetemp->Mem_iterm = 0xFF;
+						slist_node_free(pnodetemp);
 						tempdlist->Size--;
 						break;
 					}else{
@@ -206,6 +201,19 @@ Snode *slist_node_make(void *pdata)
 	
 	return pnoderet;
 }
+/*free节点*/ 
+void slist_node_free(Snode *pnode)
+{
+	if(!pnode){
+		return;
+	}
+
+	Slist_men_man[pnode->Mem_iterm] = 0;
+	pnode->Data = SLIST_NULL;
+	pnode->Next = SLIST_NULL;
+	pnode->Mem_iterm = 0xFF;
+}
+
 /*链表初始化*/ 
 void slist_init(Slist *_slist,unsigned char maxsize)
 {

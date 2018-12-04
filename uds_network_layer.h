@@ -16,7 +16,7 @@ uds_int8_t UDS_N_service_process_USData_request(void *pdata);
 //network time manage handle
 void UDS_N_time_manage_handle(void);
 //network main process
-void usd_network_all(void);
+void uds_network_all(void);
 
 #endif
 

@@ -8,7 +8,7 @@ void UDS_S_time_manage_handle(void);
 //Session init
 uds_int8_t UDS_S_init(void);
 //Session layer all
-void usd_session_all(void);
+void uds_session_all(void);
 //App get the session layer timer status
 uds_int8_t UDS_S_time_status_get(UDS_S_Time_Name_e time);
 //App get the lower layer service

@@ -14,6 +14,11 @@
 #ADD_EXECUTABLE(Net ${SRC_LIST})
 #TARGET_LINK_LIBRARIES(Net pthread glib-2.0)
 cmake_minimum_required(VERSION 2.6)
+#add gdb mode
+SET(CMAKE_BUILD_TYPE "Debug")
+SET(CMAKE_CXX_FLAGS_DEBUG "$ENV{CXXFLAGS} -O0 -Wall -g2 -ggdb")
+SET(CMAKE_CXX_FLAGS_RELEASE "$ENV{CXXFLAGS} -O3 -Wall")
+#
 project(cmake_test)
 SET(SRC_LIST
 	main.c
@@ -21,8 +26,9 @@ SET(SRC_LIST
 	uds_main.c
 	uds_network_layer.c
 	uds_session_layer.c
-	usd_interface_internal.c
-	usd_interface_ext.c)
+	uds_application_layer.c
+	uds_interface_internal.c
+	uds_interface_ext.c)
 INCLUDE(FindPkgConfig)#∆Ù”√pkgconfig
 PKG_CHECK_MODULES(GLIB glib-2.0 REQUIRED)#≤È’“glib
 INCLUDE_DIRECTORIES(/usr/include)

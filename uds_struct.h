@@ -26,7 +26,12 @@ typedef enum
 /*********************************************************************************************************************
  * Network layer types definitions
  *********************************************************************************************************************/
-	
+#define UDS_N_CAN_PDU_POOL_MAX  				80							//CAN数据池最大帧数
+#define UDS_N_RX_BUFFER_MAX						UDS_RECIVE_BUFFER_LENGTH	//发送buffer最大值
+#define UDS_N_CAN_RX_BUFFER_MAX					UDS_RECIVE_BUFFER_LENGTH	//接收buffer最大值
+#define UDS_N_CAN_RX_BUFFER_NUM					5							//接收buffer个数
+#define UDS_N_SERVICE_ISSUE_POOL_MAX  			10							//服务池大小
+
 #ifdef ADDRESS_EXTENSION_MODE
 #define SF_DATA_LENGTH 6
 #define FF_DATA_LENGTH 5
@@ -396,8 +401,9 @@ typedef enum
 	S_TIME_P2X_CAN_SERVER,	  //P2*CAN_Server
 	S_TIME_P3_CAN_CLIENT_PHYS,//P3CAN_Client_Phys
 	S_TIME_P3_CAN_CLIENT_FUNC,//P3CAN_Client_Func
-	S_TIME_P3_CLIENT,		  //P3CAN_Client
+	S_TIME_S3_CLIENT,		  //P3CAN_Client
 	S_TIME_S3_SERVER,		  //S3Client
+	S_TIME_SECURITYDELAY_SERVER,//Security_Delay
 	S_TIME_NAME_ALL
 } UDS_S_Time_Name_e;
 	
@@ -409,24 +415,6 @@ typedef enum
 	S_TIME_CNT_STS_TIMEOUT	//Timeout
 } UDS_S_TimeCnt_Status_e;
 
-typedef enum
-{
-	S_STS_IDLE = 0,//P2CAN_Client
-} UDS_S_Session_Status_e;
-
-typedef enum
-{
-	S_TYPE_DEFAULT = 0,//Default session
-	S_TYPE_NON_DEFAULT//Non-default session
-} UDS_S_Session_Type_e;
-
-
-typedef enum
-{
-	S_REQ_TYPE_NORMAL = 0,	//NORMAL request
-	S_REQ_TYPE_NRC,			//NRC request
-	S_REQ_TYPE_DSC			//DSC request
-} UDS_S_Request_Type_e;
 
 
 typedef UDS_N_Count_Status_t	UDS_S_Count_Status_t;
@@ -439,20 +427,374 @@ typedef struct
 	uds_uint16_t	P2xCAN_Server;
 	uds_uint16_t	P3CAN_Client_Phys;
 	uds_uint16_t	P3CAN_Client_Func;
-	uds_uint16_t	P3CAN_Client;
 	uds_uint16_t	S3_Client;
+	uds_uint16_t	S3_Server;
+	uds_uint16_t	SecurityDelay_Server;
 } UDS_S_Timing_Parameter_t;//Session Timing Parameter 
-
-typedef struct
-{
-	UDS_S_Session_Type_e	Session_sts;//Session status
-} UDS_S_Control_t;//Session control 
-
 
 /*********************************************************************************************************************
  * Application layer types definitions
  *********************************************************************************************************************/
+/*诊断服务*/
+#define NUMBEROFSERVICE 20				//支持的诊断服务数量---暂定
+#define NUMBEROFMAXSUBSERVICE 20		//支持的最大子服务数---暂定
+#define MAXKEYERRORPERMITCOUNT 3U		//最大密钥失败允许次数---暂定
+#define MAXNUMBEROFDID 10U				//客户端一次请求的DID数目最大值---暂定
+#define NUMOFSUPPORTEDDID 2U			//ECU支持的ReadDataByIdentifier，DID个数---暂定
+	
+#define NULLFLAG	0X00				//null
+#define NRCDATALENGTH 0X03				//NRC数据长度
+	
+#define	FALSE 0U
+#define	TRUE 1U	
+	
+/*时间参数*/
+#define P2SERVER 50U
+#define P2_SERVER 2000U
+	
+/*数据发送最大字节数*/
+#define MAXDATALENGTH UDS_RECIVE_BUFFER_LENGTH
+	
+/*诊断源地址与目标地址*/
+#define UDS_A_SOURCEADDRESS 0X00
+#define UDS_A_TARGETADDRESS 0X00
+	
+/*DTC字节长度*/
+#define DTCBYTELENGTH 10U
 
+
+typedef enum
+{
+	A_SES_TIME_CTL_STS_IDLE = 0,//Idle
+	A_SES_TIME_CTL_STS_P2RUN,	//P2 run
+	A_SES_TIME_CTL_STS_P2STOP, 	//P2 stop
+	A_SES_TIME_CTL_STS_P2xRUN,	//P2* run
+	A_SES_TIME_CTL_STS_P2xSTOP, //P2* stop
+	A_SES_TIME_CTL_STS_S3RUN,	//S3 run
+	A_SES_TIME_CTL_STS_S3STOP, 	//S3 stop
+	A_SES_TIME_CTL_STS_ERROR	//Error
+} UDS_Session_TimeCtl_Status_e;//Session time control status enum
+
+typedef enum
+{
+	A_SES_IND_NONE = 0, //None
+	A_SES_IND_NORMAL,	//Normal indication
+	A_SES_IND_FF,		//FF indication
+	A_SES_IND_TP,		//TP indication
+	A_SES_IND_ERROR		//Error
+} UDS_Session_Ind_Type_e;//Session recive indication type
+
+typedef enum
+{
+	A_SES_REQ_NONE = 0, //None
+	A_SES_REQ_NORMAL,	//Normal request
+	A_SES_REQ_ERROR		//Error
+} UDS_Session_Req_Type_e;//Session recive request type
+
+typedef enum
+{
+	A_SES_CON_NONE = 0,//None
+	A_SES_CON_NORMAL,  //Normal confirm
+	A_SES_CON_NRC,	   //Negative response code confirm
+	A_SES_CON_ERROR    //Error
+} UDS_Session_Con_Type_e;//Session recive confirm type
+
+typedef enum
+{
+	A_SES_STS_DEFAULT = 0,//Default session
+	A_SES_STS_NON_DEFAULT,//Non-default session
+	A_SES_STS_ERROR		  //Error
+} UDS_Session_Status_e;//Session status type
+
+typedef enum
+{
+	A_SES_SUP_NONE = 0,//none
+	A_SES_SUP_POSITIVE,//supress positive response
+	A_SES_SUP_ERROR	   //Error
+} UDS_Session_Suppress_Type_e;//Session supress positive response type
+
+
+
+typedef struct
+{
+	UDS_Session_TimeCtl_Status_e	Status; //Current control status
+	UDS_Session_Status_e			Ses_sts;//Session status
+	UDS_Session_Ind_Type_e			Ind_sts;//Indication status
+	UDS_Session_Con_Type_e			Con_sts;//Confirm status
+	UDS_Session_Req_Type_e			Req_sts;//Request status
+	UDS_Session_Suppress_Type_e		Sup_sts;//Supress status
+} UDS_A_Session_Time_Control_t;//Session time control; 
+
+/*Indication类型*/
+typedef enum {
+	Init_Indication = 0,
+	Indication = 1,						//Normal Indication
+	FF_Indication = 2,					//FirstFrame Indication
+	TP_Indication = 3,					//0x3E Service Indication
+	Error_Indication					//Error
+} IndicationType_e;
+
+/*Response类型*/
+typedef enum {
+	Init_Response = 0,
+	Normal_Response = 1,				//Response
+	Error_Response = 2					//Error
+} ResponseType_e;
+
+/*Confirm类型*/
+typedef enum {
+	Init_Confirm = 0,
+	Normal_Confirm = 1,					//Confirm
+	NRC78_Confirm = 2,					//NRC=0x78 Response_Confirm
+	Error_Confirm = 3					//Error
+} ConfirmType_e;
+	
+/*Seesion类型*/
+typedef enum {
+	Default_Session = 0,				//Default session
+	Non_Default_Session = 1,			//Non-default session
+	Error_Session = 2		  			//Error
+} SessionType_e;
+
+/*正响应抑制类型*/
+typedef enum {
+	NotSuppressPositive = 0,
+	SuppressPositive = 1,
+	Error_SupPositive = 2
+} SuppressPositiveType_e;
+
+/*输入输出控制参数*/
+typedef enum {
+	returnControlToECU = 0,
+	resetToDefault = 1,
+	freezeCurrentState = 2,
+	shortTermAdjustment = 3
+} inputOutputControlParameter_e;
+
+typedef enum {
+	WAIT_SEED_REQ = 0,
+	WAIT_KEY = 1,
+	WAIT_DELAY = 2,
+	UNLOCKED = 3
+}SecurityUnlockStep;
+
+/*NRC-否定响应码*/
+typedef enum {
+	PR_00 = 0x00,					//positiveresponse
+	GR_10 = 0X10,					//generalReject
+	SNS_11 = 0X11,					//serviceNotSupported
+	SFNS_12 = 0X12,					//sub-functionNotSupported 
+	IMLOIF_13 = 0X13,				//incorrectMessageLengthOrInvalidFormat  
+	RTL_14 = 0X14,					//responseTooLong
+	BRR_21 = 0X21,					//busyRepeatRequest
+	CNC_22 = 0X22,					//conditionsNotCorrect
+	RSE_24 = 0X24,					//requestSequenceError
+	ROOR_31 = 0X31,					//requestOutOfRange
+	SAD_33 = 0X33,					//securityAccessDenied
+	IK_35 = 0X35,					//invalidKey
+	ENOA_36 = 0X36,					//exceedNumberOfAttempts
+	RTDNE_37 = 0X37,				//requiredTimeDelayNotExpired
+	UDNA_70 = 0X70,					//uploadDownloadNotAccepted
+	TDS_71 = 0X71,					//transferDataSuspended
+	GPF_72 = 0X72,					//generalProgrammingFailure
+	WBSC_73 = 0X73,					//wrongBlockSequenceCounter
+	RCRRP_78 = 0X78,				//requestCorrectlyReceived-ResponsePending
+	SFNSIAS_7E = 0X7E,				//subfunctionNotSupportinActiveSession
+	SNSIAS_7F = 0X7F,				//serviceNotSupportedInActiveSession
+	VTH_92 = 0X92,					//voltageTooLow
+	VTL_93 = 0X93					//voltageTooHigh
+} NegativeResposeCode;
+
+typedef enum {
+	DIAGNOSTICSESSIONCONTROL = 0x10,
+	ECURESET = 0x11,
+	CLEARDIAGNOSTICINFORMATION = 0x14,
+	READDTCINFORMATION = 0x19,
+	READDATABYIDENTIFIER = 0x22,
+	READMEMORYBYADDRESS = 0x23,
+	SECURITYACCESS = 0x27,
+	COMMUNICATIONCONTROL = 0x28,
+	READDATABYPERIODICIDENTIFIER = 0x2A,
+	DYNAMICALLYDEFINEDATAIDENTIFIER = 0x2C,
+	WRITEDATABYIDENTIFIER = 0x2E,
+	INPUTOUTPUTCONTROLBYIDENTIFIER = 0x2F,
+	ROUTINECONTROL = 0x31,
+	REQUESTDOWNLOAD = 0x34,
+	REQUESTUPLOAD = 0x35,
+	TRANSFERDATA = 0x36,
+	REQUESTTRANSFEREXIT = 0x37,
+	WRITEMEMORYBYADDRESS = 0x3D,
+	TESTERPRESENT = 0x3E,
+	CONTROLDTCSETTING = 0x85
+} DiagnosticService_e;
+
+/*诊断类型*/
+typedef enum {
+	Diagnostic = 0,						//诊断
+	RemoteDiagnostic = 1				//远程诊断
+} MessageType_e;
+
+/*寻址类型*/
+typedef enum {
+	Physical = 0,						//物理寻址
+	Functional = 1						//功能寻址
+} TargetAddrType_e;
+
+/*服务运行结果*/
+typedef enum {
+	OK = 0,
+	NOK = 1
+} Status_e;
+
+/*诊断会话模式*/
+typedef enum {
+	DefaultSession = 0,
+	ExtendSession = 1,
+	ProgramingSession = 2,
+	FactorySeesion = 3
+} DiagnosticSession_e;
+
+/*10h-DiagnosticSessionControl服务*/
+typedef enum {
+	DefaultSessionType = 0,
+	ExtendSessionType = 1,
+	ProgramingSessionType = 2
+} DiagnosticSessionType_e;
+
+/*安全等级定义-暂定4个安全等级*/
+typedef enum {
+	LEVEL_ZERO = 7,						//unlocked
+	LEVEL_ONE = 1,						//1 level
+	LEVEL_TWO = 2,						//2 level
+	LEVEL_THREE = 4,					//3 level
+	LEVEL_FOUR = 8,						//Factory mode
+	LEVEL_UNSUPPORT = 0,				//Service not supported in active session
+}SecurityLevel;
+typedef enum {
+	SEED01 = 0x01,
+	KEY02 = 0x02,
+	SEED03 = 0x03,
+	KEY04 = 0x04
+} SeedKey_e;
+
+/*复位类型，参考ISO-14229-1中11服务复位类型的定义*/
+typedef enum {
+	HARD_RESET = 1,						//硬件复位
+	KEY_OFF_ON_RESET = 2,				//关开钥匙复位
+	SOFT_RESET = 3,						//软件复位
+	ENABLE_RAPID_POWER_SHUTDOWN = 4,	//预留
+	DISABLE_RAPID_POWER_SHUTDOWN = 5	//预留
+} EcuResetType_e;
+
+/*诊断故障状态定义*/
+typedef enum {
+	PASSED = 0,							//测试通过
+	IN_TESTING = 1,						//测试未完成
+	FAILED = 2 							//测试失败
+} DTCTestResult_e;
+
+/*通信控制参数*/
+typedef enum {
+	ERXTX = 0,							//enableRxAndTx
+	ERXDTX = 1,							//enableRxAndDisableTx
+	DRXETX = 2,							//disableRxAndEnableTx
+	DRXTX = 3,							//disableRxAndTx
+	ERXDTXWEAI = 4,						//enableRxAndDisableTxWithEnhancedAddressInformation
+	ERXTXWEAI = 5						//enableRxAndTxWithEnhancedAddressInformation
+} ControlType_e;
+typedef enum {
+	NCM = 1,							//normalCommunicationMessages
+	NWMCM = 2,							//networkManagementCommunicationMessages 
+	NWMCM_NCM = 3						//networkManagementCommunicationMessages and normalCommunicationMessages
+} CommulicationType_e;
+
+/*读取DTC信息子服务*/
+typedef enum {
+	reportNumberOfDTCByStatusMask = 1,
+	reportDTCByStatusMask = 2,
+	repDTCSnapshotRecordByDTCNum = 4,
+	repDTCExtendDataRecordByDTCNum = 6,
+	reportSupportedDTC = 0x0A
+} RDTCISubfunc_e;
+
+
+/*DTC类型定义*/
+typedef enum {
+	SAE_J2012_DA_DTCFormat_00 = 0,
+	ISO_14229_1_DTCFormat = 1,
+	SAE_J1939_73_DTCFormat = 2,
+	ISO_11992_4_DTCFormat = 3,
+	SAE_J2012_DA_DTCFormat_04 = 4
+} DTCFormatIdentifier_e;
+
+/*DTC状态定义*/
+typedef union {
+	uds_uint8_t StatusOfDTC;
+	struct {
+		uds_uint8_t testFailed : 1;							//DTC is no longer failed at the time of the request
+		uds_uint8_t testFailedThisOperationCycle : 1;		//DTC never failed on the current operation cycle
+		uds_uint8_t pendingDTC : 1;							//DTC failed on the current or previous operation cycle
+		uds_uint8_t confirmedDTC : 1;						//DTC is not confirmed at the time of the request
+		uds_uint8_t testNotCompletedSinceLastClear : 1;		//DTC test were completed since the last code clear
+		uds_uint8_t testFailedSinceLastClear : 1;			//DTC test failed at least once since last code clear
+		uds_uint8_t testNotCompletedThisOperationCycle : 1;	//DTC test completed this operation cycle
+		uds_uint8_t warningIndicatorRequested : 1;			//Server is not requesting warningIndicator to be active
+	} StateOfDTC;
+} DTCStatus;
+
+/*请求数据单元-针对客户端是响应数据单元*/
+typedef struct {
+	MessageType_e Mtype;				//诊断类型
+	uds_uint8_t SourceAddr;			//源地址
+	uds_uint8_t TargetAddr;			//目标地址
+	TargetAddrType_e TAType;			//目标地址类型
+#ifdef ADDRESS_EXTENSION_MODE	
+	uds_uint8_t A_ExtendAddr;			//扩展地址
+#endif
+	uds_uint8_t *MessageData;         	//数据
+	uds_uint16_t Length;				//数据长度
+} UDS_A_Request_t;
+
+/*确认数据单元*/
+typedef struct {
+	MessageType_e Mtype;				//诊断类型          
+	uds_uint8_t SourceAddr;            //源地址           
+	uds_uint8_t TargetAddr;            //目标地址          
+	TargetAddrType_e TAType;            //目标地址类型 
+#ifdef ADDRESS_EXTENSION_MODE	
+	uds_uint8_t A_ExtendAddr;			//扩展地址
+#endif       
+	Status_e Result;                    //数据发送结果           
+} UDS_A_Confirm_t;
+
+/*显示数据单元*/
+typedef struct {
+	MessageType_e Mtype;				//诊断类型          
+	uds_uint8_t SourceAddr;            //源地址           
+	uds_uint8_t TargetAddr;            //目标地址          
+	TargetAddrType_e TAType;            //目标地址类型
+#ifdef ADDRESS_EXTENSION_MODE	
+	uds_uint8_t A_ExtendAddr;			//扩展地址
+#endif        
+	uds_uint8_t A_PCI;         			//协议控制信息
+	uds_uint8_t A_SDU[MAXDATALENGTH];	//数据
+	uds_uint16_t Length;                //数据长度          
+	Status_e Result;					//数据接收结果
+} UDS_A_Indication_t;
+
+/*应用层缓存数据单元*/
+typedef struct {
+	MessageType_e Mtype;				//诊断类型          
+	uds_uint8_t SourceAddr;            //源地址           
+	uds_uint8_t TargetAddr;            //目标地址          
+	TargetAddrType_e TAType;            //目标地址类型
+#ifdef ADDRESS_EXTENSION_MODE	
+	uds_uint8_t A_ExtendAddr;			//扩展地址
+#endif        
+	uds_uint8_t *MessageData;         	//数据
+	uds_uint16_t Length;                //数据长度          
+	Status_e Result;
+} ServiceDataUnit_t;
 
 /*********************************************************************************************************************
  * Interface types definitions
@@ -487,7 +829,8 @@ typedef struct
 
 typedef struct
 {
-	UDS_S_Session_Type_e	Session_sts;//Session status
+	void		(*main_proc)(void);
+	uds_int8_t	(*init)(void);
 } UDS_App_Interface_t;//UDS app interface 
 
 
@@ -509,6 +852,12 @@ typedef struct
 unsigned char m_can_send_hook(unsigned long id,
 							  unsigned char length,
 							  unsigned char *data);
+
+uds_int8_t UDS_A_set_session_time_ctl_Ses_sts(UDS_Session_Status_e sts);
+uds_int8_t UDS_A_set_session_time_ctl_req(UDS_Session_Req_Type_e sts);
+uds_int8_t UDS_A_set_session_time_ctl_con(UDS_Session_Con_Type_e sts);
+uds_int8_t UDS_A_set_session_time_ctl_ind(UDS_Session_Ind_Type_e sts);
+uds_int8_t UDS_A_set_session_time_ctl_sup(UDS_Session_Suppress_Type_e sts);
 
 
 #endif
