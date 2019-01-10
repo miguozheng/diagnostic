@@ -28,10 +28,12 @@ static uds_uint8_t ServiceIndex = 0;
 static uds_uint8_t ConfirmDTCUpdate = UDS_TRUE;
 static uds_uint8_t WaitConfirmBeforeDTCUpdateEnable = UDS_FALSE;
 static uds_uint8_t WaitConfirmBeforeDTCUpdateDisable = UDS_FALSE;
+static LinkControlStep_e LinkControlStep = WAIT_MODE_REQ;
+static LinkStatus_t LinkStatus;
 
 /*DTC*/
 static uds_uint8_t DTCStatusAvailabilityMask; //provides an indication of DTC status bits that are supported by the server for masking purposes
-static uds_uint8_t DTCStatusStoreMask;
+//static uds_uint8_t DTCStatusStoreMask;
 static DTCNode DTCTable[MAX_DTC_NUMBER];
 static uds_uint8_t NumberofDTC = 0;
 static uds_uint8_t StatusOfDTCFromEEPROM;
@@ -83,6 +85,10 @@ static uds_uint8_t WaitConfirmBeforePeridDIDSend = UDS_FALSE;
 static uds_uint8_t ConfirmPeridDIDSend = UDS_FALSE;
 static uds_uint8_t NumberofSourceDataRecord = 0;
 static SourceDataRecord_t SourceDataRecordTable[MAX_SOURCEDATARECORD_NUMBER];
+
+/*Routine*/
+static uds_uint8_t NumberofRoutine = 0;
+static Routine_t RoutineTable[MAX_ROUTINE_NUMBER];
 
 /*安全访问*/
 static SecurityAccess_t SecurityAccessPara;
@@ -214,6 +220,13 @@ static void Service2EHandle(void);
 
 static void Service2FHandle(void);
 
+static void Service31Handle(void);
+static void StartRoutine_01Proc(void);
+static void StopRoutine_02Proc(void);
+static void RequestRoutineResults_03Proc(void);
+
+static void Service3DHandle(void);
+
 static void Service3EHandle(void);
 static void TesterPresent_00Proc(void);
 
@@ -221,9 +234,17 @@ static void Service85Handle(void);
 static void DTCSettingOn_01Proc(void);
 static void DTCSettingOff_02Proc(void);
 
+static void Service87Handle(void);
+static void VBTWFBR_01Proc(void);
+static void VBTWSBR_02Proc(void);
+static void TransitionBaudrate_03Proc(void);
+
 static void SessionSupportAndSecurityAccess_Init(uds_uint8_t support, uds_uint8_t service, uds_uint8_t Numofsubfunction, 
-			uds_uint8_t PHYDefaultSession_Security, uds_uint8_t PHYProgramSeesion_Security, uds_uint8_t PHYExtendedSession_Security, 
-			uds_uint8_t FUNDefaultSession_Security, uds_uint8_t FUNProgramSeesion_Security, uds_uint8_t FUNExtendedSession_Security);
+                                                 uds_uint8_t PHYDefaultSession_Security, uds_uint8_t PHYProgramSeesion_Security, uds_uint8_t PHYExtendedSession_Security, 
+			                                     uds_uint8_t FUNDefaultSession_Security, uds_uint8_t FUNProgramSeesion_Security, uds_uint8_t FUNExtendedSession_Security);
+static void ADDRoutine_Init(uds_uint16_t RoutineIdentifier, uds_uint8_t RestartRoutineSupport, uds_uint8_t StopRoutineSupport, 
+                            uds_uint8_t RequestRoutineResultsSupport, uds_uint8_t RoutineControlOptionRecordDataLength, 
+							uds_uint8_t RoutineStatusRecordDataLength, RoutineRun RoutineRun_Func);
 static void UDS_A_ServiceParameter_Init(void);
 static void UDS_A_Data_Indication_Read(void);
 static void UDS_A_Data_Confirm_Read(void);
@@ -253,10 +274,11 @@ static void AddDTC_Init(uds_uint32_t DTCNumber, DTC_test_func Test_func, DetectC
 						uds_uint8_t SnapShotTag);
 static void AddDTCSnapShot_Init(uds_uint8_t recordNumber, uds_uint16_t ID, uds_uint8_t* data, uds_uint8_t length, uds_uint8_t StartNum);
 static void AddDID_Init(uds_uint16_t ID, uds_uint8_t* data, uds_uint8_t length, uds_uint8_t DynamicalIdentifierBit, 
-								DataIdentifierType_e DataIdentifierType, uds_uint8_t DataIdentifierTag, uds_uint8_t FactorySupport);
+                        DataIdentifierType_e DataIdentifierType, uds_uint8_t DataIdentifierTag, uds_uint8_t FactorySupport);
 static void AddSourceDataRecord_Init(uds_uint16_t ID, uds_uint8_t Position, uds_uint8_t* data, uds_uint8_t length);
 static uds_uint8_t SearchDTCGroup_Func(uds_uint32_t DTCGroup);
 static DTCNode* SearchDTCNode_Func(uds_uint32_t DtcCode);
+static void DTCStatusAvailabilityMask_Init(uds_uint8_t DTCStatusAvailabilityMask);
 static void FaultAgingCounterRecordNumber_Init(uds_uint8_t RecordNumer);
 static void FaultAgedCounterRecordNumber_Init(uds_uint8_t RecordNumer);
 static void FaultOccurenceCounterRecordNumber_Init(uds_uint8_t RecordNumer);
@@ -268,6 +290,12 @@ static ReadDatabyInentifier_t* SearchDID_Func(uds_uint16_t DID);
 static void IO_ControlParameter_Test(void);
 static void UDS_A_Data_Save(UDS_EE_Tag_e tag, uds_uint8_t *buf, uds_uint8_t size);
 static void UDS_A_Data_Load(UDS_EE_Tag_e tag, uds_uint8_t *buf, uds_uint8_t size, uds_uint8_t *defaultValue);
+static TransitionWithFixedParameter_e SearchFixPara_Func(uds_uint8_t LinkControlModeIdentifier);
+static uds_uint8_t SearchSpecificPara_Func(uds_uint32_t modeParameter);
+static Routine_t* SearchRoutineID_Func(uds_uint16_t RoutineID);
+static RoutineProcessStatus_e RoutineRun_01Func(RoutineControlType_e RoutineControlType);
+static RoutineProcessStatus_e RoutineRun_02Func(RoutineControlType_e RoutineControlType);
+static RoutineProcessStatus_e RoutineRun_03Func(RoutineControlType_e RoutineControlType);
 
 Initial_SendData_t Initial_SendData_Table[Data_Number] = {
 	{(uds_uint8_t *)&VehicleSpeed, 1},
@@ -290,9 +318,12 @@ DiagService DiagnosticServiceTable[NUMBEROFSERVICE] = {
 	{ UDS_FALSE,	READDATABYPERIODICIDENTIFIER, 	4, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, LEVEL_ONE,	 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2AHandle },
 	{ UDS_FALSE,	DYNAMICALLYDEFINEDATAIDENTIFIER,3, LEVEL_UNSUPPORT, LEVEL_UNSUPPORT, LEVEL_ZERO, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2CHandle },
 	{ UDS_FALSE,	WRITEDATABYIDENTIFIER,			0, LEVEL_UNSUPPORT, LEVEL_ONE, 		 LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2EHandle },
-	{ UDS_FALSE,	INPUTOUTPUTCONTROLBYIDENTIFIER, 0, LEVEL_UNSUPPORT, LEVEL_UNSUPPORT, LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2FHandle },	
+	{ UDS_FALSE,	INPUTOUTPUTCONTROLBYIDENTIFIER, 0, LEVEL_UNSUPPORT, LEVEL_UNSUPPORT, LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2FHandle },
+	{ UDS_FALSE,	ROUTINECONTROL, 				3, LEVEL_UNSUPPORT, LEVEL_ONE, 		 LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service31Handle },
+	{ UDS_FALSE,	WRITEMEMORYBYADDRESS, 			0, LEVEL_UNSUPPORT, LEVEL_UNSUPPORT, LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service3DHandle },
 	{ UDS_FALSE,	TESTERPRESENT, 					1, LEVEL_ZERO,		LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO,		 Service3EHandle },
-	{ UDS_FALSE,	CONTROLDTCSETTING, 				2, LEVEL_UNSUPPORT,	LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_UNSUPPORT,	 LEVEL_ZERO,		LEVEL_ZERO,		 Service85Handle }
+	{ UDS_FALSE,	CONTROLDTCSETTING, 				2, LEVEL_UNSUPPORT,	LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_UNSUPPORT,	 LEVEL_ZERO,		LEVEL_ZERO,		 Service85Handle },
+	{ UDS_FALSE,	LINKCONTROL, 					3, LEVEL_UNSUPPORT,	LEVEL_ONE,		 LEVEL_ONE,	  	  LEVEL_UNSUPPORT,	 LEVEL_ONE,			LEVEL_ONE,		 Service87Handle },
 };
 Subfunction_t Service10Table[] = {
 	{ DefaultSessionType, DefaultSession_01Proc },
@@ -344,6 +375,12 @@ Subfunction_t Service2CTable[] = {
 	{ ClearDynamicallyDefinedDataIdentifier, ClearDynamicallyDefinedDataIdentifier_03Proc }
 };
 
+Subfunction_t Service31Table[] = {
+	{ StartRoutine, StartRoutine_01Proc },
+	{ StopRoutine, StopRoutine_02Proc },
+	{ RequestRoutineResults, RequestRoutineResults_03Proc }
+};
+
 Subfunction_t Service3ETable[] = {
 	{ 0x00, TesterPresent_00Proc }
 };
@@ -353,6 +390,19 @@ Subfunction_t Service85Table[] = {
 	{ DTCSetting_off, DTCSettingOff_02Proc }
 };
 
+Subfunction_t Service87Table[] = {
+	{ VerifyBaudrateTransitionWithFixedBaudrate, VBTWFBR_01Proc },
+	{ VerifyBaudrateTransitionWithSpecificBaudrate, VBTWSBR_02Proc },
+	{ TransitionBaudrate, TransitionBaudrate_03Proc }
+};
+
+const uds_uint32_t TransitionWithFixedParameterTable[FixPara_Number][2] = {
+	{ 0x01, 1000000 },
+	{ 0x02, 500000 },
+	{ 0x03, 250000 },
+	{ 0x04, 125000 },
+	{ 0x05, 57600 }
+};
 /*
 ============================================================================
  User function
@@ -867,6 +917,10 @@ static void SecurityAccess_Init(void) {
 	}
 }
 
+static void DTCStatusAvailabilityMask_Init(uds_uint8_t DTCStatusAvailabilityMask) {
+	DTCStatusAvailabilityMask = DTCStatusAvailabilityMask;
+}
+
 static void FaultOccurenceCounterRecordNumber_Init(uds_uint8_t RecordNumer) {
 	FaultOccurenceCounterRecord = RecordNumer;
 }
@@ -982,7 +1036,7 @@ static void AddDTC_Init(uds_uint32_t DTCNumber, DTC_test_func Test_func, DetectC
 		UDS_A_Data_Load(DTCTable[NumberofDTC].Config.DTCStatusTag, &(DTCTable[NumberofDTC].Sts.DTCstatus.StatusOfDTC), MAX_DTC_EEPROM_BYTES, DataLoad_DefaultValue);
 		//UDS_A_eeprom_read(DTCTable[NumberofDTC].DTCStatusTag, &(DTCTable[NumberofDTC].DTCstatus.StatusOfDTC)); //读取DTCstatus
 	#if 1
-		DTCTable[NumberofDTC].Sts.DTCstatus.StatusOfDTC = DTCTable[NumberofDTC].Sts.DTCstatus.StatusOfDTC & DTCStatusStoreMask;
+		DTCTable[NumberofDTC].Sts.DTCstatus.StatusOfDTC = DTCTable[NumberofDTC].Sts.DTCstatus.StatusOfDTC & DTCStatusAvailabilityMask;
 	#else
 		DTCTable[NumberofDTC].DTCstatus.StatusOfDTC_t.testFailed = 0; //bit0 default 0
 		DTCTable[NumberofDTC].DTCstatus.StatusOfDTC_t.testFailedThisOperationCycle = 0; //bit1 default 0
@@ -1015,6 +1069,22 @@ static void SessionSupportAndSecurityAccess_Init(uds_uint8_t support, uds_uint8_
 	}
 }
 
+static void ADDRoutine_Init(uds_uint16_t RoutineIdentifier, uds_uint8_t RestartRoutineSupport, uds_uint8_t StopRoutineSupport, 
+                            uds_uint8_t RequestRoutineResultsSupport, uds_uint8_t RoutineControlOptionRecordDataLength, 
+							uds_uint8_t RoutineStatusRecordDataLength, RoutineRun RoutineRun_Func) {
+	if(NumberofRoutine < MAX_ROUTINE_NUMBER) {
+		RoutineTable[NumberofRoutine].RoutineIdentifier = RoutineIdentifier;
+		RoutineTable[NumberofRoutine].RestartRoutineSupport = RestartRoutineSupport;
+		RoutineTable[NumberofRoutine].StopRoutineSupport = StopRoutineSupport;
+		RoutineTable[NumberofRoutine].RequestRoutineResultsSupport = RequestRoutineResultsSupport;
+		RoutineTable[NumberofRoutine].RoutineControlOptionRecordDataLength = RoutineControlOptionRecordDataLength;
+		RoutineTable[NumberofRoutine].RoutineStatusRecordDataLength = RoutineStatusRecordDataLength;
+		RoutineTable[NumberofRoutine].RoutineRun_Func = RoutineRun_Func;
+		RoutineTable[NumberofRoutine].RoutineStatus = Routine_Init;
+		NumberofRoutine ++;
+	}
+}
+
 void UDS_A_Diagnostic_Init(void) {
 
 	DiagnosticState_Init(DefaultSession, LEVEL_ZERO, DiagProcessInit, Default_Session, Init_Indication, Init_Confirm, Init_Response, NotSuppressPositive);
@@ -1033,19 +1103,22 @@ void UDS_A_Diagnostic_Init(void) {
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x2C, 3, LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_ZERO, 	LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x2E, 0, LEVEL_UNSUPPORT, LEVEL_ONE,			LEVEL_ONE, 		LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x2F, 0, LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_ONE, 		LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
+	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x31, 3, LEVEL_UNSUPPORT, LEVEL_ONE,			LEVEL_ONE, 		LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
+	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x3D, 0, LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_ONE, 		LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x3E, 1, LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO, 	LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x85, 2, LEVEL_UNSUPPORT, LEVEL_ZERO,		LEVEL_ZERO,		LEVEL_UNSUPPORT, LEVEL_ZERO,		LEVEL_ZERO);
+	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x87, 3, LEVEL_UNSUPPORT, LEVEL_ONE,			LEVEL_ONE,		LEVEL_UNSUPPORT, LEVEL_ONE,			LEVEL_ONE);
 
 	/*ECU大小端判断,响应数据转换为大端存储*/
 	//BigLittleSwitch_Init();
 	
 	/*DTC Parameters*/
-	NumberofDTC = 0; //DTC数
-	NumberofDTCGroup = 0; //DTCGroup数
-	NumberofDTCSnapshot = 0; //DTCSnapshot数
-	DTCStatusAvailabilityMask = 0x7f; //DTC状态可用掩码
-	DTCStatusStoreMask = 0x3c; //需要保存的DTC状态掩码
-	
+	//NumberofDTC = 0; //DTC数
+	//NumberofDTCGroup = 0; //DTCGroup数
+	//NumberofDTCSnapshot = 0; //DTCSnapshot数
+	//DTCStatusAvailabilityMask = 0x7f; //DTC状态可用掩码
+	//DTCStatusStoreMask = 0x3c; //需要保存的DTC状态掩码
+	DTCStatusAvailabilityMask_Init(0x7f);	
 
 	/*DTCGroup*/
 	AddDTCGroup_Init(0x00ffffff);
@@ -1089,6 +1162,11 @@ void UDS_A_Diagnostic_Init(void) {
 	AddSourceDataRecord_Init(0x5678, 1, Switch_SendData_Table[Data_VehicleSpeed].DataArray, 1);
 	AddSourceDataRecord_Init(0x5678, 2, Switch_SendData_Table[Data_EngineRPM].DataArray, 2);
 	AddSourceDataRecord_Init(0x9ABC, 1, &ReadDIDArrayB128, 4);
+
+	/*RoutineIdentifier*/
+	ADDRoutine_Init(0x2568, UDS_TRUE, UDS_TRUE, UDS_TRUE, 0, 0, RoutineRun_01Func);
+	ADDRoutine_Init(0x1389, UDS_TRUE, UDS_TRUE, UDS_FALSE, 2, 2, RoutineRun_02Func);
+	ADDRoutine_Init(0xA276, UDS_FALSE, UDS_FALSE, UDS_TRUE, 1, 3, RoutineRun_03Func);
 }
 
 static void UDS_A_ServiceParameter_Init(void) {
@@ -1652,12 +1730,14 @@ static void DefaultSession_01Proc(void) {
 
 		IO_ControlPara_Flag_u.status = UDS_FALSE; //输入输出控制参数无效
 
+		LinkStatus.LinkControlProcess = WAIT_MODE_REQ;; //ECU恢复默认的通讯模式
+
 		/*响应数组填充*/
 		SDUSendBuffArray[1] = DefaultSessionType;
 		SDUSendBuffArray[2] = (uds_uint8_t)(UDS_A_timer_value_get(S_TIME_P2_CAN_SERVER) >> 8);
 		SDUSendBuffArray[3] = (uds_uint8_t)UDS_A_timer_value_get(S_TIME_P2_CAN_SERVER);
-		SDUSendBuffArray[4] = (uds_uint8_t)(UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER) >> 8);
-		SDUSendBuffArray[5] = (uds_uint8_t)UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER);
+		SDUSendBuffArray[4] = (uds_uint8_t)((UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER) / 10) >> 8);
+		SDUSendBuffArray[5] = (uds_uint8_t)(UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER) / 10);
 		ResponseDataLength = 6;
 	}
 }
@@ -1693,8 +1773,8 @@ static void ProgramingSession_02Proc(void) {
 		SDUSendBuffArray[1] = ProgramingSessionType;
 		SDUSendBuffArray[2] = (uds_uint8_t)(UDS_A_timer_value_get(S_TIME_P2_CAN_SERVER) >> 8);
 		SDUSendBuffArray[3] = (uds_uint8_t)UDS_A_timer_value_get(S_TIME_P2_CAN_SERVER);
-		SDUSendBuffArray[4] = (uds_uint8_t)(UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER) >> 8);
-		SDUSendBuffArray[5] = (uds_uint8_t)UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER);
+		SDUSendBuffArray[4] = (uds_uint8_t)((UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER) / 10) >> 8);
+		SDUSendBuffArray[5] = (uds_uint8_t)(UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER) / 10);
 		ResponseDataLength = 6;
 	}
 }
@@ -1730,8 +1810,8 @@ static void ExtendSession_03Proc(void) {
 		SDUSendBuffArray[1] = ExtendSessionType;
 		SDUSendBuffArray[2] = (uds_uint8_t)(UDS_A_timer_value_get(S_TIME_P2_CAN_SERVER) >> 8);
 		SDUSendBuffArray[3] = (uds_uint8_t)UDS_A_timer_value_get(S_TIME_P2_CAN_SERVER);
-		SDUSendBuffArray[4] = (uds_uint8_t)(UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER) >> 8);
-		SDUSendBuffArray[5] = (uds_uint8_t)UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER);
+		SDUSendBuffArray[4] = (uds_uint8_t)((UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER) / 10) >> 8);
+		SDUSendBuffArray[5] = (uds_uint8_t)(UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER) / 10);
 		ResponseDataLength = 6;
 	}
 }
@@ -1767,8 +1847,8 @@ static void FactorySeesion_04Proc(void) {
 		SDUSendBuffArray[1] = FactorySeesionType;
 		SDUSendBuffArray[2] = (uds_uint8_t)(UDS_A_timer_value_get(S_TIME_P2_CAN_SERVER) >> 8);
 		SDUSendBuffArray[3] = (uds_uint8_t)UDS_A_timer_value_get(S_TIME_P2_CAN_SERVER);
-		SDUSendBuffArray[4] = (uds_uint8_t)(UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER) >> 8);
-		SDUSendBuffArray[5] = (uds_uint8_t)UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER);
+		SDUSendBuffArray[4] = (uds_uint8_t)((UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER) / 10) >> 8);
+		SDUSendBuffArray[5] = (uds_uint8_t)(UDS_A_timer_value_get(S_TIME_P2X_CAN_SERVER) / 10);
 		ResponseDataLength = 6;
 	}
 }
@@ -2376,7 +2456,7 @@ static void Service23Handle(void) {
 		}
 
 		/*子服务addressAndLengthFormatIdentifier错误*/
-		if ((0 == memorySizeBytes) || (0 == memoryAddressBytes)) { //(memorySizeBytes > 服务器支持的最大值)，地址有效性检查等待添加
+		if ((0 == memorySizeBytes) || (0 == memoryAddressBytes)) { //(memorySizeBytes > 服务器支持的最大值)等
 			NRC = ROOR_31;
 			return;
 		}
@@ -2390,12 +2470,12 @@ static void Service23Handle(void) {
 
 	/*条件检查通过，服务处理*/
 	{
-		memoryAddress = ReadMemoryByAddress_Func((&UDS_A_Indication_SDU.A_SDU[1]), memoryAddressBytes);
-		memorySize = ReadMemorySize_Func(&UDS_A_Indication_SDU.A_SDU[memoryAddressBytes + 1], memorySizeBytes);	
+		memoryAddress = ReadMemoryByAddress_Func(UDS_A_Indication_SDU.A_SDU + 1, memoryAddressBytes);
+		memorySize = ReadMemorySize_Func((UDS_A_Indication_SDU.A_SDU + memoryAddressBytes + 1), memorySizeBytes);	
 		
-		/*此处需要添加Tester请求地址与Server本地地址的映射关系*/
+		/*此处需要添加Tester请求地址与Server本地地址的映射关系，地址有效性检查，地址操作权限检查等*/
 		
-		memcpy(&SDUSendBuffArray[1], memoryAddress, memorySize);
+		memcpy(SDUSendBuffArray + 1, memoryAddress, memorySize);
 		ResponseDataLength = memorySize + 1;
 	}
 }
@@ -2556,7 +2636,8 @@ static void SecurityAccessKey_02Proc(void) {
 
 	/*条件检查通过，服务处理*/
 	{
-		SeedKey = ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[1] << 24) | ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[2] << 16) | ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[3] << 8) | (uds_uint32_t)UDS_A_Indication_SDU.A_SDU[4];
+		SeedKey = ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[1] << 24) | ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[2] << 16) 
+					| ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[3] << 8) | (uds_uint32_t)UDS_A_Indication_SDU.A_SDU[4];
 		if (SeedKey == SecurityAccessPara.Key) {
 			SecurityAccessPara.KeyVerifyErrorCount = 0; //密钥验证失败计数器清零
 			SystemState.SecurityLevel = LEVEL_ONE; //切换安全等级
@@ -2673,7 +2754,8 @@ static void SecurityAccessKey_04Proc(void) {
 
 	/*条件检查通过，服务处理*/
 	{
-		SeedKey = ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[1] << 24) | ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[2] << 16) | ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[3] << 8) | (uds_uint32_t)UDS_A_Indication_SDU.A_SDU[4];
+		SeedKey = ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[1] << 24) | ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[2] << 16) 
+					| ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[3] << 8) | (uds_uint32_t)UDS_A_Indication_SDU.A_SDU[4];
 		if (SeedKey == SecurityAccessPara.Key) {
 			SecurityAccessPara.KeyVerifyErrorCount = 0; //密钥验证失败计数器清零
 			SystemState.SecurityLevel = LEVEL_TWO; //切换安全等级
@@ -3885,6 +3967,341 @@ static void IO_ControlParameter_Test(void) {
 	}
 }
 
+static void Service31Handle(void) {
+	uds_uint8_t SubIndex = 0;
+	uds_uint8_t ValidSub = UDS_FALSE;
+	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
+	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
+
+	/*子服务查询*/
+	while ((SubIndex < DiagnosticServiceTable[ServiceIndex].NumOfSubfunc) && (!ValidSub)) {
+		if (Service31Table[SubIndex].Sub_func == ServiceSubFunc) {
+			ValidSub = UDS_TRUE;
+		}
+		else {
+			SubIndex++;
+		}
+	}
+
+	if (UDS_TRUE == ValidSub) {
+		Service31Table[SubIndex].SubServiceHandle();
+	}
+	else {
+		NRC = SFNS_12;
+	}
+}
+
+static Routine_t* SearchRoutineID_Func(uds_uint16_t RoutineID) {
+	for(uds_uint8_t i = 0; i < NumberofRoutine; i++) {
+		if (RoutineTable[i].RoutineIdentifier == RoutineID) {
+			return RoutineTable + i;
+		}
+	}
+	return UDS_A_NULL;
+}
+
+static void StartRoutine_01Proc(void) {
+	uds_uint16_t RoutineID = ((uds_uint16_t)UDS_A_Indication_SDU.A_SDU[1] << 8) | (uds_uint16_t)UDS_A_Indication_SDU.A_SDU[2];
+	Routine_t* TempRoutineID = SearchRoutineID_Func(RoutineID);
+	
+	/*错误条件检查*/
+	{
+
+		/*子服务长度错误*/
+		if ((UDS_A_Indication_SDU.Length < 4) || (UDS_A_Indication_SDU.Length != (4 + TempRoutineID->RoutineControlOptionRecordDataLength))) {
+			NRC = IMLOIF_13;
+			return;
+		}
+
+		/*routineIdentifier不存在*/
+		if (UDS_A_NULL == TempRoutineID) { //暂未添加RoutineControlOptionRecord有效性检查
+			NRC = ROOR_31;
+			return;
+		}
+
+		/*条件不满足-待添加*/
+		if (0) {
+			NRC = CNC_22;
+			return;
+		}
+
+		/*请求序列检查-例程不可重启，例程启动进行中*/
+		if ((UDS_FALSE == TempRoutineID->RestartRoutineSupport) 
+			&& ((Routine_start_successfully == TempRoutineID->RoutineStatus) || (Routine_inprogress == TempRoutineID->RoutineStatus))) {
+			NRC = RSE_24;
+			return;
+		}
+	}
+	
+	/*条件检查通过，服务处理*/
+	{
+		TempRoutineID->RoutineStatus = TempRoutineID->RoutineRun_Func(StartRoutine);
+		SDUSendBuffArray[1] = StartRoutine;
+		SDUSendBuffArray[2] = UDS_A_Indication_SDU.A_SDU[1]; //RoutineID
+		SDUSendBuffArray[3] = UDS_A_Indication_SDU.A_SDU[2]; //RoutineID
+
+		//Test
+		for (uds_uint8_t i = 0; i < TempRoutineID->RoutineStatusRecordDataLength; i++) {
+			SDUSendBuffArray[4 + i] = UDS_A_Indication_SDU.A_SDU[3 + i];
+		}
+		ResponseDataLength = 4 + TempRoutineID->RoutineStatusRecordDataLength;
+	}	
+}
+
+static void StopRoutine_02Proc(void) {
+	uds_uint16_t RoutineID = ((uds_uint16_t)UDS_A_Indication_SDU.A_SDU[1] << 8) | (uds_uint16_t)UDS_A_Indication_SDU.A_SDU[2];
+	Routine_t* TempRoutineID = SearchRoutineID_Func(RoutineID);
+	
+	/*错误条件检查*/
+	{
+
+		/*子服务长度错误*/
+		if ((UDS_A_Indication_SDU.Length < 4) || (UDS_A_Indication_SDU.Length != (4 + TempRoutineID->RoutineControlOptionRecordDataLength))) {
+			NRC = IMLOIF_13;
+			return;
+		}
+
+		/*routineIdentifier不存在*/
+		if (UDS_A_NULL == TempRoutineID) { //暂未添加RoutineControlOptionRecord有效性检查
+			NRC = ROOR_31;
+			return;
+		}
+
+		/*子服务不支持*/
+		if (UDS_FALSE == TempRoutineID->StopRoutineSupport) {
+			NRC = SFNS_12;
+			return;
+		}
+
+		/*条件不满足-待添加*/
+		if (0) {
+			NRC = CNC_22;
+			return;
+		}
+
+		/*请求序列检查-例程未运行或例程已完成*/
+		if ((TempRoutineID->RoutineStatus != Routine_start_successfully) && (TempRoutineID->RoutineStatus != Routine_inprogress)) {
+			NRC = RSE_24;
+			return;
+		}
+	}
+
+	/*条件检查通过，服务处理*/
+	{
+		TempRoutineID->RoutineStatus = TempRoutineID->RoutineRun_Func(StopRoutine);
+		SDUSendBuffArray[1] = StopRoutine;
+		SDUSendBuffArray[2] = UDS_A_Indication_SDU.A_SDU[1]; //RoutineID
+		SDUSendBuffArray[3] = UDS_A_Indication_SDU.A_SDU[2]; //RoutineID
+
+		//Test
+		for (uds_uint8_t i = 0; i < TempRoutineID->RoutineStatusRecordDataLength; i++) {
+			SDUSendBuffArray[4 + i] = UDS_A_Indication_SDU.A_SDU[3 + i];
+		}
+		ResponseDataLength = 4 + TempRoutineID->RoutineStatusRecordDataLength;
+	}	
+}
+
+static void RequestRoutineResults_03Proc(void) {
+	uds_uint16_t RoutineID = ((uds_uint16_t)UDS_A_Indication_SDU.A_SDU[1] << 8) | (uds_uint16_t)UDS_A_Indication_SDU.A_SDU[2];
+	Routine_t* TempRoutineID = SearchRoutineID_Func(RoutineID);
+	
+	/*错误条件检查*/
+	{
+
+		/*子服务长度错误*/
+		if (UDS_A_Indication_SDU.Length != 4) {
+			NRC = IMLOIF_13;
+			return;
+		}
+
+		/*routineIdentifier不存在*/
+		if (UDS_A_NULL == TempRoutineID) { //暂未添加RoutineControlOptionRecord有效性检查
+			NRC = ROOR_31;
+			return;
+		}
+
+		/*子服务不支持*/
+		if (UDS_FALSE == TempRoutineID->RequestRoutineResultsSupport) {
+			NRC = SFNS_12;
+			return;
+		}
+
+		/*条件不满足-待添加*/
+		if (0) {
+			NRC = CNC_22;
+			return;
+		}
+
+		/*请求序列检查-例程未运行或例程已完成*/
+		if (TempRoutineID->RoutineStatus != Routine_Completed_successfully) {
+			NRC = RSE_24;
+			return;
+		}
+	}
+
+	/*条件检查通过，服务处理*/
+	{
+		TempRoutineID->RoutineStatus = TempRoutineID->RoutineRun_Func(RequestRoutineResults);
+		SDUSendBuffArray[1] = RequestRoutineResults;
+		SDUSendBuffArray[2] = UDS_A_Indication_SDU.A_SDU[1]; //RoutineID
+		SDUSendBuffArray[3] = UDS_A_Indication_SDU.A_SDU[2]; //RoutineID
+
+		//Test
+		for (uds_uint8_t i = 0; i < TempRoutineID->RoutineStatusRecordDataLength; i++) {
+			SDUSendBuffArray[4 + i] = UDS_A_Indication_SDU.A_SDU[3 + i];
+		}
+		ResponseDataLength = 4 + TempRoutineID->RoutineStatusRecordDataLength;
+	}
+}
+
+static RoutineProcessStatus_e RoutineRun_01Func(RoutineControlType_e RoutineControlType) {
+	//Test
+	switch(RoutineControlType) {
+		case StartRoutine:
+			if (1) {
+				return Routine_start_successfully;
+			}
+			else if (1){
+				return Routine_inprogress;
+			}
+			else {
+				return Routine_start_unsuccessfully;
+			}
+			break;
+		case StopRoutine:
+			if (0) {
+				return Routine_Completed_unsuccessfully;
+			}
+			else {
+				return Routine_Completed_successfully;
+			}
+			break;
+		case RequestRoutineResults:
+			
+			return Routine_Init;
+
+			break;
+		default:
+			return Routine_Init;
+	}
+}
+
+static RoutineProcessStatus_e RoutineRun_02Func(RoutineControlType_e RoutineControlType) {
+	//Test
+	switch(RoutineControlType) {
+		case StartRoutine:
+			if (1) {
+				return Routine_start_successfully;
+			}
+			else if (1){
+				return Routine_inprogress;
+			}
+			else {
+				return Routine_start_unsuccessfully;
+			}
+			break;
+		case StopRoutine:
+			if (0) {
+				return Routine_Completed_unsuccessfully;
+			}
+			else {
+				return Routine_Completed_successfully;
+			}
+			break;
+		case RequestRoutineResults:
+			
+			return Routine_Init;
+
+			break;
+		default:
+			return Routine_Init;
+	}
+}
+
+static RoutineProcessStatus_e RoutineRun_03Func(RoutineControlType_e RoutineControlType) {
+	//Test
+	switch(RoutineControlType) {
+		case StartRoutine:
+			if (1) {
+				return Routine_start_successfully;
+			}
+			else if (1){
+				return Routine_inprogress;
+			}
+			else {
+				return Routine_start_unsuccessfully;
+			}
+			break;
+		case StopRoutine:
+			if (0) {
+				return Routine_Completed_unsuccessfully;
+			}
+			else {
+				return Routine_Completed_successfully;
+			}
+			break;
+		case RequestRoutineResults:
+			
+			return Routine_Init;
+
+			break;
+		default:
+			return Routine_Init;
+	}
+}
+
+/*3Dh-根据地址写内存服务*/
+static void Service3DHandle(void) {
+	uds_uint8_t memorySizeBytes = (UDS_A_Indication_SDU.A_SDU[0] >> 4) & 0x0f, memoryAddressBytes = UDS_A_Indication_SDU.A_SDU[0] & 0x0f;
+	uds_uint32_t* memoryAddress;
+	uds_uint32_t memorySize;
+
+	/*错误条件检查*/
+	{
+
+		/*子服务长度错误*/
+		if ((UDS_A_Indication_SDU.Length < 5) || (UDS_A_Indication_SDU.Length <= (memorySizeBytes + memoryAddressBytes + 2)) || (memorySizeBytes > 4) || (memoryAddressBytes > 4)) {
+			NRC = IMLOIF_13;
+			return;
+		}
+
+		/*子服务addressAndLengthFormatIdentifier错误*/
+		if ((0 == memorySizeBytes) || (0 == memoryAddressBytes)) { //(memorySizeBytes > 服务器支持的最大值)等
+			NRC = ROOR_31;
+			return;
+		}
+
+		/*操作条件不满足-待添加*/
+		if (0) {
+			NRC = CNC_22;
+			return;
+		}
+		
+		/*一般编程错误-待添加*/
+		if (0) {
+			NRC = GPF_72;
+			return;
+		}
+	}
+
+	/*条件检查通过，服务处理*/
+	{
+		memoryAddress = ReadMemoryByAddress_Func(UDS_A_Indication_SDU.A_SDU + 1, memoryAddressBytes);
+		
+		/*此处需要添加Tester请求地址与Server本地地址的映射关系，地址有效性检查，地址操作权限检查等*/
+		
+		memorySize = ReadMemorySize_Func((UDS_A_Indication_SDU.A_SDU + memoryAddressBytes + 1), memorySizeBytes);
+		if (UDS_A_Indication_SDU.Length == (2 + memorySizeBytes + memoryAddressBytes + memorySize)) {			
+			memcpy(memoryAddress, (UDS_A_Indication_SDU.A_SDU + memorySizeBytes + memoryAddressBytes + 1), memorySize);
+			memcpy(SDUSendBuffArray + 1, UDS_A_Indication_SDU.A_SDU, memorySizeBytes + memoryAddressBytes + 1);
+			ResponseDataLength = memorySizeBytes + memoryAddressBytes + 2;
+		}
+		else {
+			NRC = IMLOIF_13;
+		}
+	}
+}
+
 /*3Eh-会话保持服务*/
 static void Service3EHandle(void) {
 	uds_uint8_t SubIndex = 0;
@@ -4017,6 +4434,150 @@ static void DTCSettingOff_02Proc(void) {
 	}
 }
 
+static void Service87Handle(void) {
+	uds_uint8_t SubIndex = 0;
+	uds_uint8_t ValidSub = UDS_FALSE;
+	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
+	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
+
+	/*子服务查询*/
+	while ((SubIndex < DiagnosticServiceTable[ServiceIndex].NumOfSubfunc) && (!ValidSub)) {
+		if (Service87Table[SubIndex].Sub_func == ServiceSubFunc) {
+			ValidSub = UDS_TRUE;
+		}
+		else {
+			SubIndex++;
+		}
+	}
+
+	if (UDS_TRUE == ValidSub) {
+		Service87Table[SubIndex].SubServiceHandle();
+	}
+	else {
+		NRC = SFNS_12;
+	}
+}
+
+static void VBTWFBR_01Proc(void) {
+	uds_uint8_t LinkControlModeIdentifier = UDS_A_Indication_SDU.A_SDU[1];
+	TransitionWithFixedParameter_e ParaIndex = SearchFixPara_Func(LinkControlModeIdentifier);
+	
+	/*错误条件检查*/
+	{
+
+		/*子服务长度错误*/
+		if (UDS_A_Indication_SDU.Length != 3) {
+			NRC = IMLOIF_13;
+			return;
+		}
+
+		/*LinkControlModeIdentifier不存在*/
+		if (FixPara_Number == ParaIndex) {
+			NRC = ROOR_31;
+			return;
+		}
+
+		/*条件不满足-待添加*/
+		if (0) {
+			NRC = CNC_22;
+			return;
+		}
+	}
+
+	/*条件检查通过，服务处理*/
+	{
+		LinkStatus.LinkControlProcess = WAIT_TRANSITION;
+		LinkStatus.TransitionBaudrates = TransitionWithFixedParameterTable[ParaIndex][1];
+		SDUSendBuffArray[1] = VerifyBaudrateTransitionWithFixedBaudrate;
+		ResponseDataLength = 2;
+	}
+}
+
+static TransitionWithFixedParameter_e SearchFixPara_Func(uds_uint8_t LinkControlModeIdentifier) {
+	for(uds_uint8_t i = 0; i < FixPara_Number; i++) {
+		if (TransitionWithFixedParameterTable[i][0] == LinkControlModeIdentifier) {
+			return i;
+		}
+	}
+	return FixPara_Number;
+}
+
+static void VBTWSBR_02Proc(void) {
+	uds_uint32_t modeParameter = ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[1] << 16) | ((uds_uint32_t)UDS_A_Indication_SDU.A_SDU[2] << 8)
+									|(uds_uint32_t)UDS_A_Indication_SDU.A_SDU[3];
+	uds_uint8_t Temp = SearchSpecificPara_Func(modeParameter);
+	
+	/*错误条件检查*/
+	{
+
+		/*子服务长度错误*/
+		if (UDS_A_Indication_SDU.Length != 5) {
+			NRC = IMLOIF_13;
+			return;
+		}
+
+		/*modeParameter无效*/
+		if (UDS_FALSE == Temp) {
+			NRC = ROOR_31;
+			return;
+		}
+
+		/*条件不满足-待添加*/
+		if (0) {
+			NRC = CNC_22;
+			return;
+		}
+	}
+
+	/*条件检查通过，服务处理*/
+	{
+		LinkStatus.LinkControlProcess = WAIT_TRANSITION;
+		LinkStatus.TransitionBaudrates = modeParameter;
+		SDUSendBuffArray[1] = VerifyBaudrateTransitionWithSpecificBaudrate;
+		ResponseDataLength = 2;
+	}
+}
+
+static uds_uint8_t SearchSpecificPara_Func(uds_uint32_t modeParameter) {
+	if (1) {
+		return UDS_TRUE;
+	}
+	else {
+		return UDS_FALSE;
+	}
+}
+
+static void TransitionBaudrate_03Proc(void) {
+
+	/*错误条件检查*/
+	{
+
+		/*子服务长度错误*/
+		if (UDS_A_Indication_SDU.Length != 2) {
+			NRC = IMLOIF_13;
+			return;
+		}
+
+		/*请求顺序错误*/
+		if (LinkStatus.LinkControlProcess != WAIT_TRANSITION) {
+			NRC = RSE_24;
+			return;
+		}
+
+		/*条件不满足-待添加*/
+		if (0) {
+			NRC = CNC_22;
+			return;
+		}
+	}
+
+	/*条件检查通过，服务处理*/
+	{
+		LinkStatus.LinkControlProcess = TRANSITION_OK; //平台根据LinkStatus.LinkControlProcess判断是否使用设定的波特率
+		SDUSendBuffArray[1] = TransitionBaudrate;
+		ResponseDataLength = 2;
+	}
+}
 
 
 /*DTC测试结果处理*/
@@ -4024,7 +4585,7 @@ static void DTCHandle(DTCNode* DtcNode) {
 	DTCTestSampleResult_e PreTestResult = NO_RESULT;
 	DTCTestResult_e CurTestResult = IN_TESTING;
 	uds_uint8_t OperateCycleComplete = UDS_FALSE,test_result;
-	uds_uint8_t DTCStatusOld = DtcNode->Sts.DTCstatus.StatusOfDTC & DTCStatusStoreMask;
+	uds_uint8_t DTCStatusOld = DtcNode->Sts.DTCstatus.StatusOfDTC & DTCStatusAvailabilityMask;
 
 	/*Operation Cycle*/
 	if (DtcNode->Sts.DetecCycleCounter < DtcNode->Config.DetecTimes) {
@@ -4178,7 +4739,7 @@ static void DTCHandle(DTCNode* DtcNode) {
 
 	}
 
-	if (DTCStatusOld != (DtcNode->Sts.DTCstatus.StatusOfDTC & DTCStatusStoreMask)) {
+	if (DTCStatusOld != (DtcNode->Sts.DTCstatus.StatusOfDTC & DTCStatusAvailabilityMask)) {
 		//UDS_A_eeprom_write(DtcNode->DTCStatusTag, &(DtcNode->DTCstatus.StatusOfDTC));
 		UDS_A_Data_Save(DtcNode->Config.DTCStatusTag, &(DtcNode->Sts.DTCstatus.StatusOfDTC), MAX_DTC_EEPROM_BYTES);
 	}
@@ -4224,6 +4785,8 @@ static void UDS_A_Timeout_Proc(void) {
 		ConfirmDTCUpdate = UDS_TRUE; //使能DTC状态Update
 
 		IO_ControlPara_Flag_u.status = UDS_FALSE; //输入输出控制参数无效
+
+		LinkStatus.LinkControlProcess = WAIT_MODE_REQ;; //ECU恢复默认的通讯模式
 
 		UDS_PRINTF("S3 timeout!\n\r");		
 	}

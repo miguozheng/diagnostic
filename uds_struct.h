@@ -443,42 +443,6 @@ typedef struct
 /*********************************************************************************************************************
  * Application layer types definitions
  *********************************************************************************************************************/
-/*诊断服务*/
-#define NUMBEROFSERVICE 21U				//支持的诊断服务数量---暂定
-#define MAXKEYERRORPERMITCOUNT 3U		//最大密钥失败允许次数---暂定
-#define MAXNUMBEROFDID 10U				//客户端一次请求的DID数目最大值---暂定
-#define NUMOFREADDID 50U				//ECU支持的ReadDataByIdentifier与ReadDataByPeriodicIdentifier，DID个数---暂定
-#define MAXNUMBEROFPERIODICDID 10U		//一次请求周期数据标识符允许的最大个数---暂定
-#define MAX_DTC_NUMBER 14U				//ECU支持的最大DTC数目---暂定
-#define MAX_DTCGROUP_NUMBER 5U			//ECU支持的最大DTC组数目---暂定
-#define MAX_DTC_EEPROM_BYTES 1U			//每个DTC需要保存的字节数，DTC状态+DTC扩展数据---暂定
-#define MAX_RECORDNUMBER_NUMBER 3U		//Snapshot的最大Recordnumber---暂定
-#define MAX_DTC_SNAPSHOT_STORE_BYTES 256U//每个DTCSnapshot保存的最大字节数
-#define DTC_SNAPSHOT_RECORDNUMBER01 1U	//Recordnumber=1的Snapshot
-#define DTC_SNAPSHOT_RECORDNUMBER02 2U	//Recordnumber=2的Snapshot
-#define DTC_SNAPSHOT1_EEPROM_BYTES 1U	//DTCSnapshot1需要保存的字节数，根据程序设计变更---暂定
-#define DTC_SNAPSHOT2_EEPROM_BYTES 2U	//DTCSnapshot2需要保存的字节数，根据程序设计变更---暂定
-#define DTC_SNAPSHOT3_EEPROM_BYTES 2U	//DTCSnapshot3需要保存的字节数，根据程序设计变更---暂定
-#define DTC_SNAPSHOT_BYTES (DTC_SNAPSHOT1_EEPROM_BYTES + DTC_SNAPSHOT2_EEPROM_BYTES + DTC_SNAPSHOT3_EEPROM_BYTES) //DTCSnapshot所占字节数
-#define DTC_SNAPSHOT1_STARTNUM 0U		//DTCSnapshot1保存数据的起始序号---暂定
-#define DTC_SNAPSHOT2_STARTNUM DTC_SNAPSHOT1_EEPROM_BYTES //DTCSnapshot2保存数据的起始序号---暂定
-#define DTC_SNAPSHOT3_STARTNUM (DTC_SNAPSHOT1_EEPROM_BYTES + DTC_SNAPSHOT2_EEPROM_BYTES) //DTCSnapshot3保存数据的起始序号---暂定
-#define TRANSMISSIONMODE_SLOWRATE 2000U	//低速发送模式，不能小于函数最小运行周期
-#define TRANSMISSIONMODE_MEDIUMRATE 1000U//中速发送模式--暂定
-#define TRANSMISSIONMODE_FASTRATE 500U	//快速发送模式--暂定
-#define PERIODICDIDDATARUNPERIOD 10U	//周期响应数据函数运行周期10ms,需要与函数调用周期一直
-#define DATAPUTCYCLE 1U					//周期响应数据填充一次数据的延时运行周期数
-#define MAX_PERIODICDID_DATALENGTH 5U   //Standard周期DID数据最大字节长度
-#define MAX_SOURCEDATARECORD_NUMBER 50U //源数据数目
-#define MAX_SOURCEDATARECORD_POSITION 100U //源数据最大位置
-#define DYNAMICALLY_DEFINE_PDID_COUNTER 1U //0X2C动态定义的PDID，重新定义后为运行状态,周期计数器的状态，0-Clear,1-Keep
-#define VIN_NUMBER_BYTES 17U			//VIN字节数
-#define INPUTOUTPUTCONTROL_DID0 0x0579U //输入输出控制参数DID0
-#define ENGINE_RPM_DEFAULT 800U			//IO控制参数发送机转速默认值800
-#define INPUTOUTPUTCONTROL_DID1 0xAA35U	//输入输出控制参数DID1
-#define VEHICLE_SPEED_DEFAULT 50U		//IO控制参数车速默认值50
-#define VOLTAGE_DEFAULT 1000U			//IO控制参数电压默认值1000mv
-
 #ifndef UDS_FALSE	
 #define	UDS_FALSE 0U
 #endif
@@ -494,6 +458,59 @@ typedef struct
 #ifndef NO_TAG
 #define NO_TAG 0U
 #endif
+
+/*诊断服务*/
+#define NUMBEROFSERVICE 21U				//支持的诊断服务数量---暂定
+#define MAXKEYERRORPERMITCOUNT 3U		//最大密钥失败允许次数---暂定
+
+#define MAXNUMBEROFDID 10U				//客户端一次请求的DID数目最大值---暂定
+#define NUMOFREADDID 50U				//ECU支持的ReadDataByIdentifier与ReadDataByPeriodicIdentifier，DID个数---暂定
+#define MAXNUMBEROFPERIODICDID 10U		//一次请求周期数据标识符允许的最大个数---暂定
+
+#define MAX_DTC_NUMBER 14U				//ECU支持的最大DTC数目---暂定
+#define MAX_DTCGROUP_NUMBER 5U			//ECU支持的最大DTC组数目---暂定
+#define MAX_DTC_EEPROM_BYTES 1U			//每个DTC需要保存的字节数，DTC状态+DTC扩展数据---暂定
+#define MAX_RECORDNUMBER_NUMBER 3U		//Snapshot的最大Recordnumber---暂定
+#define MAX_DTC_SNAPSHOT_STORE_BYTES 256U//每个DTCSnapshot保存的最大字节数
+#define DTC_SNAPSHOT_RECORDNUMBER01 1U	//Recordnumber=1的Snapshot
+#define DTC_SNAPSHOT_RECORDNUMBER02 2U	//Recordnumber=2的Snapshot
+#define DTC_SNAPSHOT1_EEPROM_BYTES 1U	//DTCSnapshot1需要保存的字节数，根据程序设计变更---暂定
+#define DTC_SNAPSHOT2_EEPROM_BYTES 2U	//DTCSnapshot2需要保存的字节数，根据程序设计变更---暂定
+#define DTC_SNAPSHOT3_EEPROM_BYTES 2U	//DTCSnapshot3需要保存的字节数，根据程序设计变更---暂定
+#define DTC_SNAPSHOT_BYTES (DTC_SNAPSHOT1_EEPROM_BYTES + DTC_SNAPSHOT2_EEPROM_BYTES + DTC_SNAPSHOT3_EEPROM_BYTES) //DTCSnapshot所占字节数
+#define DTC_SNAPSHOT1_STARTNUM 0U		//DTCSnapshot1保存数据的起始序号---暂定
+#define DTC_SNAPSHOT2_STARTNUM DTC_SNAPSHOT1_EEPROM_BYTES //DTCSnapshot2保存数据的起始序号---暂定
+#define DTC_SNAPSHOT3_STARTNUM (DTC_SNAPSHOT1_EEPROM_BYTES + DTC_SNAPSHOT2_EEPROM_BYTES) //DTCSnapshot3保存数据的起始序号---暂定
+#define INVALID_DTCEXTDATARECORDNUMBER 0xFFU //无效的DTC扩展数据序号
+
+#define PREFAILEDSTEP 2					//Test Sample测试失败计数器步幅
+#define PREPASSEDSTEP 1					//Test Sample测试成功计数器步幅
+#define FAILEDFAULTDETECTIONTIMES 20	//测试失败判断阈值
+#define PASSEDFAULTDETECTIONTIMES (-20)	//测试成功判断阈值
+#define DETECTIMES 100U					//一个测试循环包含的测试次数
+#define DTCCONFIRMATIONTHRESHOLD 2U		//DTC确认的循环数
+#define MAXDTCAGINGTIMES 10U			//故障老化阈值
+
+#define TRANSMISSIONMODE_SLOWRATE 2000U	//低速发送模式，不能小于函数最小运行周期
+#define TRANSMISSIONMODE_MEDIUMRATE 1000U//中速发送模式--暂定
+#define TRANSMISSIONMODE_FASTRATE 500U	//快速发送模式--暂定
+#define PERIODICDIDDATARUNPERIOD 10U	//周期响应数据函数运行周期10ms,需要与函数调用周期一直
+#define DATAPUTCYCLE 1U					//周期响应数据填充一次数据的延时运行周期数
+#define MAX_PERIODICDID_DATALENGTH 5U   //Standard周期DID数据最大字节长度
+
+#define MAX_SOURCEDATARECORD_NUMBER 50U //源数据数目
+#define MAX_SOURCEDATARECORD_POSITION 100U //源数据最大位置
+#define DYNAMICALLY_DEFINE_PDID_COUNTER 1U //0X2C动态定义的PDID，重新定义后为运行状态,周期计数器的状态，0-Clear,1-Keep
+
+#define VIN_NUMBER_BYTES 17U			//VIN字节数
+
+#define INPUTOUTPUTCONTROL_DID0 0x0579U //输入输出控制参数DID0
+#define ENGINE_RPM_DEFAULT 800U			//IO控制参数发送机转速默认值800
+#define INPUTOUTPUTCONTROL_DID1 0xAA35U	//输入输出控制参数DID1
+#define VEHICLE_SPEED_DEFAULT 50U		//IO控制参数车速默认值50
+#define VOLTAGE_DEFAULT 1000U			//IO控制参数电压默认值1000mv
+
+#define MAX_ROUTINE_NUMBER 10U			//最大例程数目
 	
 /*数据发送最大字节数*/
 #define MAXDATALENGTH UDS_RECIVE_BUFFER_LENGTH
@@ -501,16 +518,6 @@ typedef struct
 /*诊断源地址与目标地址*/
 #define UDS_A_SOURCEADDRESS (UDS_DIAGNOSTICS_SELF_ID & 0xff)
 #define UDS_A_TARGETADDRESS 0X05
-	
-/*DTC*/
-#define PREFAILEDSTEP 2
-#define PREPASSEDSTEP 1
-#define FAILEDFAULTDETECTIONTIMES 20
-#define PASSEDFAULTDETECTIONTIMES (-20)
-#define DETECTIMES 100U
-#define DTCCONFIRMATIONTHRESHOLD 2U
-#define MAXDTCAGINGTIMES 10U
-#define INVALID_DTCEXTDATARECORDNUMBER 0xFFU
 
 typedef enum
 {
@@ -853,8 +860,35 @@ typedef enum {
 	FixPara_Number
 } TransitionWithFixedParameter_e;
 
+typedef enum {
+	StartRoutine = 1,
+	StopRoutine = 2,
+	RequestRoutineResults
+} RoutineControlType_e;
+
+typedef enum {
+	Routine_Init = 0,
+	Routine_start_successfully,
+	Routine_start_unsuccessfully,
+	Routine_inprogress,
+	Routine_Completed_successfully,
+	Routine_Completed_unsuccessfully 
+} RoutineProcessStatus_e;
+
 typedef void(*ServiceHandler)(void);	
 typedef uds_uint8_t (*DetectCondition)(void);
+typedef RoutineProcessStatus_e (*RoutineRun)(RoutineControlType_e RoutineControlType);
+
+typedef struct {
+	uds_uint16_t RoutineIdentifier;
+	uds_uint8_t RestartRoutineSupport;
+	uds_uint8_t StopRoutineSupport;
+	uds_uint8_t RequestRoutineResultsSupport;
+	uds_uint8_t RoutineControlOptionRecordDataLength;
+	uds_uint8_t RoutineStatusRecordDataLength;
+	RoutineProcessStatus_e RoutineStatus;
+	RoutineRun RoutineRun_Func;
+} Routine_t;
 
 typedef struct {
 	LinkControlStep_e LinkControlProcess;
