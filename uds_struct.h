@@ -97,6 +97,14 @@ typedef enum
 	N_BUFFER_OVFLW, //On reception of a flow control (FC) N_PDU with FlowStatus = OVFLW
 	N_ERROR			//An error has been detected
 } UDS_N_Result_e;
+
+typedef enum
+{
+	N_PARA_CH_STmin = 0,//Send time min
+	N_PARA_CH_BS,		//Block size
+	N_PARA_CH_ERROR		//type end
+} UDS_N_Change_Parameter_e;
+
 typedef enum
 {
 	N_PARA_CHANGE_OK = 0,	//Execution has completed successfully
@@ -211,14 +219,14 @@ typedef struct
 typedef struct
 {
 	UDS_N_Service_Info_Pub_t	Info;		 	 //address information
-	uds_uint8_t					Parameter;		 //Identifies a parameter of the network layer.
+	UDS_N_Change_Parameter_e	Parameter;		 //Identifies a parameter of the network layer.
 	uds_uint8_t					Parameter_Value; //Parameter Value
 } UDS_N_Change_Parameters_Request_t;//N_ChangeParameters.request 
 
 typedef struct
 {
 	UDS_N_Service_Info_Pub_t		Info;		 			//address information
-	uds_uint8_t						Parameter;		 		//Identifies a parameter of the network layer.
+	UDS_N_Change_Parameter_e		Parameter;		 		//Identifies a parameter of the network layer.
 	UDS_N_Result_Change_Parameter_e	Result_ChangeParameter;	//Status relating to the outcome of a service execution
 } UDS_N_Change_Parameters_Confirm_t;//N_ChangeParameters.confirm
 
@@ -436,32 +444,73 @@ typedef struct
  * Application layer types definitions
  *********************************************************************************************************************/
 /*诊断服务*/
-#define NUMBEROFSERVICE 20				//支持的诊断服务数量---暂定
-#define NUMBEROFMAXSUBSERVICE 20		//支持的最大子服务数---暂定
+#define NUMBEROFSERVICE 21U				//支持的诊断服务数量---暂定
 #define MAXKEYERRORPERMITCOUNT 3U		//最大密钥失败允许次数---暂定
 #define MAXNUMBEROFDID 10U				//客户端一次请求的DID数目最大值---暂定
-#define NUMOFSUPPORTEDDID 2U			//ECU支持的ReadDataByIdentifier，DID个数---暂定
-	
-#define NULLFLAG	0X00				//null
-#define NRCDATALENGTH 0X03				//NRC数据长度
-	
-#define	FALSE 0U
-#define	TRUE 1U	
-	
-/*时间参数*/
-#define P2SERVER 50U
-#define P2_SERVER 2000U
+#define NUMOFREADDID 50U				//ECU支持的ReadDataByIdentifier与ReadDataByPeriodicIdentifier，DID个数---暂定
+#define MAXNUMBEROFPERIODICDID 10U		//一次请求周期数据标识符允许的最大个数---暂定
+#define MAX_DTC_NUMBER 14U				//ECU支持的最大DTC数目---暂定
+#define MAX_DTCGROUP_NUMBER 5U			//ECU支持的最大DTC组数目---暂定
+#define MAX_DTC_EEPROM_BYTES 1U			//每个DTC需要保存的字节数，DTC状态+DTC扩展数据---暂定
+#define MAX_RECORDNUMBER_NUMBER 3U		//Snapshot的最大Recordnumber---暂定
+#define MAX_DTC_SNAPSHOT_STORE_BYTES 256U//每个DTCSnapshot保存的最大字节数
+#define DTC_SNAPSHOT_RECORDNUMBER01 1U	//Recordnumber=1的Snapshot
+#define DTC_SNAPSHOT_RECORDNUMBER02 2U	//Recordnumber=2的Snapshot
+#define DTC_SNAPSHOT1_EEPROM_BYTES 1U	//DTCSnapshot1需要保存的字节数，根据程序设计变更---暂定
+#define DTC_SNAPSHOT2_EEPROM_BYTES 2U	//DTCSnapshot2需要保存的字节数，根据程序设计变更---暂定
+#define DTC_SNAPSHOT3_EEPROM_BYTES 2U	//DTCSnapshot3需要保存的字节数，根据程序设计变更---暂定
+#define DTC_SNAPSHOT_BYTES (DTC_SNAPSHOT1_EEPROM_BYTES + DTC_SNAPSHOT2_EEPROM_BYTES + DTC_SNAPSHOT3_EEPROM_BYTES) //DTCSnapshot所占字节数
+#define DTC_SNAPSHOT1_STARTNUM 0U		//DTCSnapshot1保存数据的起始序号---暂定
+#define DTC_SNAPSHOT2_STARTNUM DTC_SNAPSHOT1_EEPROM_BYTES //DTCSnapshot2保存数据的起始序号---暂定
+#define DTC_SNAPSHOT3_STARTNUM (DTC_SNAPSHOT1_EEPROM_BYTES + DTC_SNAPSHOT2_EEPROM_BYTES) //DTCSnapshot3保存数据的起始序号---暂定
+#define TRANSMISSIONMODE_SLOWRATE 2000U	//低速发送模式，不能小于函数最小运行周期
+#define TRANSMISSIONMODE_MEDIUMRATE 1000U//中速发送模式--暂定
+#define TRANSMISSIONMODE_FASTRATE 500U	//快速发送模式--暂定
+#define PERIODICDIDDATARUNPERIOD 10U	//周期响应数据函数运行周期10ms,需要与函数调用周期一直
+#define DATAPUTCYCLE 1U					//周期响应数据填充一次数据的延时运行周期数
+#define MAX_PERIODICDID_DATALENGTH 5U   //Standard周期DID数据最大字节长度
+#define MAX_SOURCEDATARECORD_NUMBER 50U //源数据数目
+#define MAX_SOURCEDATARECORD_POSITION 100U //源数据最大位置
+#define DYNAMICALLY_DEFINE_PDID_COUNTER 1U //0X2C动态定义的PDID，重新定义后为运行状态,周期计数器的状态，0-Clear,1-Keep
+#define VIN_NUMBER_BYTES 17U			//VIN字节数
+#define INPUTOUTPUTCONTROL_DID0 0x0579U //输入输出控制参数DID0
+#define ENGINE_RPM_DEFAULT 800U			//IO控制参数发送机转速默认值800
+#define INPUTOUTPUTCONTROL_DID1 0xAA35U	//输入输出控制参数DID1
+#define VEHICLE_SPEED_DEFAULT 50U		//IO控制参数车速默认值50
+#define VOLTAGE_DEFAULT 1000U			//IO控制参数电压默认值1000mv
+
+#ifndef UDS_FALSE	
+#define	UDS_FALSE 0U
+#endif
+
+#ifndef UDS_TRUE
+#define	UDS_TRUE 1U	
+#endif
+
+#ifndef UDS_A_NULL
+#define UDS_A_NULL (void*)(0)
+#endif
+
+#ifndef NO_TAG
+#define NO_TAG 0U
+#endif
 	
 /*数据发送最大字节数*/
 #define MAXDATALENGTH UDS_RECIVE_BUFFER_LENGTH
 	
 /*诊断源地址与目标地址*/
-#define UDS_A_SOURCEADDRESS 0X00
-#define UDS_A_TARGETADDRESS 0X00
+#define UDS_A_SOURCEADDRESS (UDS_DIAGNOSTICS_SELF_ID & 0xff)
+#define UDS_A_TARGETADDRESS 0X05
 	
-/*DTC字节长度*/
-#define DTCBYTELENGTH 10U
-
+/*DTC*/
+#define PREFAILEDSTEP 2
+#define PREPASSEDSTEP 1
+#define FAILEDFAULTDETECTIONTIMES 20
+#define PASSEDFAULTDETECTIONTIMES (-20)
+#define DETECTIMES 100U
+#define DTCCONFIRMATIONTHRESHOLD 2U
+#define MAXDTCAGINGTIMES 10U
+#define INVALID_DTCEXTDATARECORDNUMBER 0xFFU
 
 typedef enum
 {
@@ -513,8 +562,6 @@ typedef enum
 	A_SES_SUP_ERROR	   //Error
 } UDS_Session_Suppress_Type_e;//Session supress positive response type
 
-
-
 typedef struct
 {
 	UDS_Session_TimeCtl_Status_e	Status; //Current control status
@@ -563,20 +610,27 @@ typedef enum {
 	Error_SupPositive = 2
 } SuppressPositiveType_e;
 
+/*诊断服务进程*/
+typedef enum {
+	DiagProcessInit = 0,
+	DiagProcessing = 1,
+	Error_DiagProcess = 2
+} DiagnosticProcStatus_e;
+
 /*输入输出控制参数*/
 typedef enum {
 	returnControlToECU = 0,
-	resetToDefault = 1,
-	freezeCurrentState = 2,
-	shortTermAdjustment = 3
-} inputOutputControlParameter_e;
+	resetToDefault,
+	freezeCurrentState,
+	shortTermAdjustment
+} InputOutputControlParameter_e;
 
 typedef enum {
 	WAIT_SEED_REQ = 0,
 	WAIT_KEY = 1,
 	WAIT_DELAY = 2,
 	UNLOCKED = 3
-}SecurityUnlockStep;
+} SecurityUnlockStep;
 
 /*NRC-否定响应码*/
 typedef enum {
@@ -625,7 +679,8 @@ typedef enum {
 	REQUESTTRANSFEREXIT = 0x37,
 	WRITEMEMORYBYADDRESS = 0x3D,
 	TESTERPRESENT = 0x3E,
-	CONTROLDTCSETTING = 0x85
+	CONTROLDTCSETTING = 0x85,
+	LINKCONTROL = 0x87
 } DiagnosticService_e;
 
 /*诊断类型*/
@@ -656,9 +711,10 @@ typedef enum {
 
 /*10h-DiagnosticSessionControl服务*/
 typedef enum {
-	DefaultSessionType = 0,
-	ExtendSessionType = 1,
-	ProgramingSessionType = 2
+	DefaultSessionType = 1,
+	ProgramingSessionType = 2,
+	ExtendSessionType = 3,
+	FactorySeesionType = 0x5F			//暂定
 } DiagnosticSessionType_e;
 
 /*安全等级定义-暂定4个安全等级*/
@@ -667,9 +723,9 @@ typedef enum {
 	LEVEL_ONE = 1,						//1 level
 	LEVEL_TWO = 2,						//2 level
 	LEVEL_THREE = 4,					//3 level
-	LEVEL_FOUR = 8,						//Factory mode
+	LEVEL_FOUR = 0x80,					//Factory mode
 	LEVEL_UNSUPPORT = 0,				//Service not supported in active session
-}SecurityLevel;
+} SecurityLevel_e;
 typedef enum {
 	SEED01 = 0x01,
 	KEY02 = 0x02,
@@ -686,12 +742,18 @@ typedef enum {
 	DISABLE_RAPID_POWER_SHUTDOWN = 5	//预留
 } EcuResetType_e;
 
-/*诊断故障状态定义*/
+/*诊断测试结果*/
 typedef enum {
-	PASSED = 0,							//测试通过
-	IN_TESTING = 1,						//测试未完成
-	FAILED = 2 							//测试失败
+	IN_TESTING = 0,
+	PASSED = 1,	
+	FAILED = 2 
 } DTCTestResult_e;
+
+typedef enum {
+	PREPASSED = 0,
+	PREFAILED = 1,
+	NO_RESULT = 2
+} DTCTestSampleResult_e;
 
 /*通信控制参数*/
 typedef enum {
@@ -712,11 +774,12 @@ typedef enum {
 typedef enum {
 	reportNumberOfDTCByStatusMask = 1,
 	reportDTCByStatusMask = 2,
-	repDTCSnapshotRecordByDTCNum = 4,
-	repDTCExtendDataRecordByDTCNum = 6,
+	reportDTCSnapshotIdentification = 3,
+	reportDTCSnapshotRecordByDTCNumber = 4,
+	reportDTCStoredDataByRecordNumber = 5,
+	reportDTCExtDataRecordByDTCNumber = 6,
 	reportSupportedDTC = 0x0A
 } RDTCISubfunc_e;
-
 
 /*DTC类型定义*/
 typedef enum {
@@ -726,6 +789,111 @@ typedef enum {
 	ISO_11992_4_DTCFormat = 3,
 	SAE_J2012_DA_DTCFormat_04 = 4
 } DTCFormatIdentifier_e;
+
+/*transmissionMode*/
+typedef enum {
+	SendAtSlowRate = 1,
+	SendAtMediumRate = 2,
+	SendAtFastRate = 3,
+	StopSending = 4
+} TransmissionMode_e;
+
+/*DynamicallyDefineDataIdentifier*/
+typedef enum {
+	DefineByIdentifier = 1,
+	DefineByMemoryAddress = 2,
+	ClearDynamicallyDefinedDataIdentifier = 3
+} DynamicallyDefineDataIdentifier_e;
+
+typedef enum {
+	NoDefine = 0,
+	StaticDefine = 1,
+	DynamicalDefine = 2
+} DynamicalDataIdentifierStatus_e;
+
+typedef enum {
+	DTCSetting_on = 1,
+	DTCSetting_off = 2
+} DTCSettingType_e;
+
+typedef enum {
+	Data_VehicleSpeed = 0,
+	Data_EngineRPM,
+	Data_Voltage,
+	Data_EngineRPM_IO,
+	
+	Data_Number
+} Send_Data_e;
+
+typedef enum {
+	ReadOnly = 0,
+	Write_RAM,
+	Write_EEPROM,
+	Write_RAM_IO
+} DataIdentifierType_e;
+
+typedef enum {
+	VerifyBaudrateTransitionWithFixedBaudrate = 1,
+	VerifyBaudrateTransitionWithSpecificBaudrate,
+	TransitionBaudrate
+} LinkControlType_e;
+
+typedef enum {
+	WAIT_MODE_REQ = 0,
+	WAIT_TRANSITION,
+	TRANSITION_OK
+} LinkControlStep_e;
+
+typedef enum {
+	Baudrate_1M = 0,
+	Baudrate_500K,
+	Baudrate_250K,
+	Baudrate_125K,
+	Baudrate_57600,
+	FixPara_Number
+} TransitionWithFixedParameter_e;
+
+typedef void(*ServiceHandler)(void);	
+typedef uds_uint8_t (*DetectCondition)(void);
+
+typedef struct {
+	LinkControlStep_e LinkControlProcess;
+	uds_uint32_t TransitionBaudrates;
+} LinkStatus_t;
+
+typedef struct {
+	uds_uint8_t* DataPointer;
+	uds_uint8_t DataLength;
+} Initial_SendData_t;
+
+typedef struct {
+	uds_uint8_t DataArray[8];
+	//uds_uint8_t DataLength;
+} Switch_SendData_t;
+
+typedef struct {
+	uds_uint8_t Sub_func;					//子服务ID
+	ServiceHandler SubServiceHandle;		//子服务执行函数
+} Subfunction_t;
+
+typedef struct {
+	uds_uint8_t Support;
+	DiagnosticService_e ServiceID;			//诊断服务ID
+	uds_uint8_t NumOfSubfunc;				//子服务数目
+	uds_uint8_t PHYDefaultSession_Security;	//security suppport in default session physical address
+	uds_uint8_t PHYProgramSeesion_Security;	//security suppport in program session physical address
+	uds_uint8_t PHYExtendedSession_Security;//security suppport in extened session physical address
+	uds_uint8_t FUNDefaultSession_Security;	//security suppport in default session function address
+	uds_uint8_t FUNProgramSeesion_Security;	//security suppport in program session function address
+	uds_uint8_t FUNExtendedSession_Security;//security suppport in extened session function address
+	ServiceHandler ServiceHandle;
+} DiagService;
+
+typedef struct {
+	uds_uint16_t DataIdentifier;				//数据ID
+	uds_uint8_t DataBytesLength;				//数据字节长度
+	uds_uint8_t *DataArray;						//DID数据指针
+} DataByIdentifier;
 
 /*DTC状态定义*/
 typedef union {
@@ -739,14 +907,120 @@ typedef union {
 		uds_uint8_t testFailedSinceLastClear : 1;			//DTC test failed at least once since last code clear
 		uds_uint8_t testNotCompletedThisOperationCycle : 1;	//DTC test completed this operation cycle
 		uds_uint8_t warningIndicatorRequested : 1;			//Server is not requesting warningIndicator to be active
-	} StateOfDTC;
-} DTCStatus;
+	} StatusOfDTC_t;
+} DTCStatus_u;
+
+/*DTC故障检测条目*/
+//typedef union {
+//	uds_uint32_t DTCTableByte;
+//	struct {
+//		uds_uint32_t CANReceiveNodeLost_0x363 : 1;
+//		uds_uint32_t CANReceiveNodeLost_0x3C3 : 1;
+//		uds_uint32_t CANReceiveNodeLost_0x490 : 1;
+//		uds_uint32_t CANReceiveNodeLost_0x581 : 1;
+//		uds_uint32_t CANReceiveNodeLost_0x5A0 : 1;
+//		uds_uint32_t CANReceiveNodeLost_0x64F : 1;
+//		uds_uint32_t LEDTempSensor_GCCShort_GNDOpen : 1;
+//		uds_uint32_t LEDTempSensor_GCCOpen_GNDShort : 1;
+//		uds_uint32_t TFTTempSensor_GCCShort_GNDOpen : 1;
+//		uds_uint32_t TFTTempSensor_GCCOpen_GNDShort : 1;
+//		uds_uint32_t MainboardTempSensor_GCCShort_GNDOpen : 1;
+//		uds_uint32_t MainboardTempSensor_GCCOpen_GNDShort : 1;
+//		uds_uint32_t LightSensorMalfunction : 1;
+//		uds_uint32_t SteppingMotorMalfunction : 1;
+//	} DTCTable_t;
+//} DTCTable_u;
+
+typedef uds_uint8_t (*DTC_test_func)(void);
+
+/*DTC节点*/
+typedef struct {
+	uds_uint32_t DTCNumber;
+	DTC_test_func Test_func;
+	DetectCondition EnableDTCDetect;
+	uds_uint8_t DetecTimes;
+	uds_int8_t PrefailedStep;
+	uds_int8_t PrepassedStep;
+	uds_int8_t FailedFaultDetectionTimes; //确保(FailedFaultDetectionTimes + PrefailedStep) <= max(uds_int8_t)
+	uds_int8_t PassedFaultDetectionTimes; //确保(PassedFaultDetectionTimes - PrepassedStep) >= min(uds_int8_t)
+	uds_uint8_t Confirmationthreshold;
+	uds_uint8_t MaxDTCAgingTimes;
+	uds_uint8_t DTCStatusTag;
+	uds_uint8_t SnapShotTag;
+} DTCNode_Config;
+typedef struct {
+	uds_uint8_t DetecCycleCounter;
+	uds_int8_t FaultDetectionCounter;
+	uds_uint8_t ConfirmationCounter;
+	DTCStatus_u DTCstatus;
+	uds_uint8_t FaultOccurenceCounter;
+	uds_uint8_t FaultPendingCounter;
+	uds_uint8_t FaultAgedCounter;
+	uds_uint8_t FaultAgingCounter;
+} DTCNode_Sts;
+
+
+typedef struct {
+	DTCNode_Config	Config;
+	DTCNode_Sts		Sts;
+	//uds_int8_t SupportedSnapShotNumber;
+	//uds_int8_t SnapShotCounter;
+} DTCNode;
+
+/*DTCGroup*/
+typedef struct {
+	uds_uint32_t GroupID;
+}DTCGroup_t;
+
+/*DTCSnapshot-暂定*/
+typedef struct {
+	uds_uint8_t SnapshotRecordNumber;
+	uds_uint16_t SnapshotID;
+	uds_uint8_t* SnapshotData;
+	uds_uint8_t DataLength;
+	uds_uint8_t StartNum;
+}DTCSnapshot_t;
+
+/*可读DID-暂定*/
+typedef struct {
+	uds_uint16_t DataIdentifier;
+	uds_uint8_t* DataPointer;
+	uds_uint8_t DataLength;
+	uds_uint8_t Support;				//支持PDID
+	uds_uint8_t TransmitTime;			//PDID设定周期
+	uds_uint8_t TransmitCounter;		//PDID周期计数器
+	uds_uint8_t DynamicalIdentifierBit;	//动态DID标志位
+	DataIdentifierType_e DataIdentifierType; //DID类型
+	uds_uint8_t DataIdentifierTag;
+	uds_uint8_t FactoryConfigSupport;	//下线配置支持
+}ReadDatabyInentifier_t;
+
+typedef struct {
+	uds_uint8_t DataIndex[200];
+	uds_uint8_t FirstofDataIndex;
+	uds_uint16_t NumofData;
+} PeriodicDID_t;
+
+typedef struct {
+	SecurityUnlockStep UnlockStep;
+	uds_uint32_t Key; //秘钥
+	uds_uint8_t KeyVerifyErrorCount; //密钥验证失败计数器需保存至EEPROM，用于每次上电或ECU复位时读取
+	uds_uint8_t KeyVerifyErrorCountFromEEPROM;
+	uds_uint8_t AccessErrorCountTag;
+} SecurityAccess_t;
+
+typedef struct {
+	uds_uint16_t SourceDataIdentifier;
+	uds_uint8_t PositionInSourceDataRecord;
+	uds_uint8_t* DataPointer;
+	uds_uint8_t MemorySize;
+} SourceDataRecord_t;
 
 /*请求数据单元-针对客户端是响应数据单元*/
 typedef struct {
 	MessageType_e Mtype;				//诊断类型
-	uds_uint8_t SourceAddr;			//源地址
-	uds_uint8_t TargetAddr;			//目标地址
+	uds_uint8_t SourceAddr;				//源地址
+	uds_uint8_t TargetAddr;				//目标地址
 	TargetAddrType_e TAType;			//目标地址类型
 #ifdef ADDRESS_EXTENSION_MODE	
 	uds_uint8_t A_ExtendAddr;			//扩展地址
@@ -758,8 +1032,8 @@ typedef struct {
 /*确认数据单元*/
 typedef struct {
 	MessageType_e Mtype;				//诊断类型          
-	uds_uint8_t SourceAddr;            //源地址           
-	uds_uint8_t TargetAddr;            //目标地址          
+	uds_uint8_t SourceAddr;          	//源地址           
+	uds_uint8_t TargetAddr;           	//目标地址          
 	TargetAddrType_e TAType;            //目标地址类型 
 #ifdef ADDRESS_EXTENSION_MODE	
 	uds_uint8_t A_ExtendAddr;			//扩展地址
@@ -770,8 +1044,8 @@ typedef struct {
 /*显示数据单元*/
 typedef struct {
 	MessageType_e Mtype;				//诊断类型          
-	uds_uint8_t SourceAddr;            //源地址           
-	uds_uint8_t TargetAddr;            //目标地址          
+	uds_uint8_t SourceAddr;           	//源地址           
+	uds_uint8_t TargetAddr;           	//目标地址          
 	TargetAddrType_e TAType;            //目标地址类型
 #ifdef ADDRESS_EXTENSION_MODE	
 	uds_uint8_t A_ExtendAddr;			//扩展地址
@@ -785,8 +1059,8 @@ typedef struct {
 /*应用层缓存数据单元*/
 typedef struct {
 	MessageType_e Mtype;				//诊断类型          
-	uds_uint8_t SourceAddr;            //源地址           
-	uds_uint8_t TargetAddr;            //目标地址          
+	uds_uint8_t SourceAddr;          	//源地址           
+	uds_uint8_t TargetAddr;           	//目标地址          
 	TargetAddrType_e TAType;            //目标地址类型
 #ifdef ADDRESS_EXTENSION_MODE	
 	uds_uint8_t A_ExtendAddr;			//扩展地址
@@ -795,6 +1069,54 @@ typedef struct {
 	uds_uint16_t Length;                //数据长度          
 	Status_e Result;
 } ServiceDataUnit_t;
+/*********************************************************************************************************************
+ * EEPROM types definitions
+ *********************************************************************************************************************/
+#define EEPROM_BASE_ADDRESS 0//eeprom base address
+
+typedef enum {
+	EE_TEST = 0, 						//test
+	SECURITYACCESS_ERROR_COUNTER_TAG,
+	DTC_CAN_RECEIVENODELOST_0x363_TAG,
+	DTC_CAN_RECEIVENODELOST_0x3C3_TAG,
+	DTC_CAN_RECEIVENODELOST_0x490_TAG,
+	DTC_CAN_RECEIVENODELOST_0x581_TAG,
+	DTC_CAN_RECEIVENODELOST_0x5A0_TAG,
+	DTC_CAN_RECEIVENODELOST_0x64F_TAG,
+	DTC_LED_TEMPSENSOR_GCCSHORT_GNDOPEN_TAG,
+	DTC_LED_TEMPSENSOR_GCCOPEN_GNDSHORT_TAG,
+	DTC_TFT_TEMPSENSOR_GCCSHORT_GNDOPEN_TAG,
+	DTC_TFT_TEMPSENSOR_GCCOPEN_GNDSHORT_TAG,
+	DTC_MAINBOARD_TEMPSENSOR_GCCSHORT_GNDOPEN_TAG,
+	DTC_MAINBOARD_TEMPSENSOR_GCCOPEN_GNDSHORT_TAG,
+	DTC_LIRHTSENSOR_MALFUNCTION_TAG,
+	DTC_STEPPINGMOTOR_MALFUNCTION_TAG,
+	
+	DTCSNAPSHOT_CAN_0x363_TAG,
+	DTCSNAPSHOT_CAN_0x3C3_TAG,
+	DTCSNAPSHOT_CAN_0x490_TAG,
+	DTCSNAPSHOT_CAN_0x581_TAG,
+	DTCSNAPSHOT_CAN_0x5A0_TAG,
+	DTCSNAPSHOT_CAN_0x64F_TAG,
+	DTCSNAPSHOT_LED_TEMPSENSOR_GCCSHORT_GNDOPEN_TAG,
+	DTCSNAPSHOT_LED_TEMPSENSOR_GCCOPEN_GNDSHORT_TAG,
+	DTCSNAPSHOT_TFT_TEMPSENSOR_GCCSHORT_GNDOPEN_TAG,
+	DTCSNAPSHOT_TFT_TEMPSENSOR_GCCOPEN_GNDSHORT_TAG,
+	DTCSNAPSHOT_MAINBOARD_TEMPSENSOR_GCCSHORT_GNDOPEN_TAG,
+	DTCSNAPSHOT_MAINBOARD_TEMPSENSOR_GCCOPEN_GNDSHORT_TAG,
+	DTCSNAPSHOT_LIRHTSENSOR_MALFUNCTION_TAG,
+	DTCSNAPSHOT_STEPPINGMOTOR_MALFUNCTION_TAG,
+
+	VIN_NUMNER_TAG,
+	
+	EE_TAG_ALL
+} UDS_EE_Tag_e;//
+
+typedef struct
+{
+	UDS_EE_Tag_e	Tag;
+	uds_uint8_t		Length;
+} UDS_EE_Info_t;//UDS network interface 
 
 /*********************************************************************************************************************
  * Interface types definitions
@@ -810,28 +1132,40 @@ typedef struct
 	uds_uint8_t (*service_get)(UDS_N_Services_t *res,
 							   uds_uint8_t *buf);
 	uds_int8_t  (*USData_request)(void *pdata);
+	uds_int8_t  (*ParaChange_request)(void *pdata);
 } UDS_Network_Interface_t;//UDS network interface 
 
 typedef struct
 {
-	void 		(*time_manage_handle)(void);
-	void		(*main_proc)(void);
-	uds_int8_t	(*init)(void);
-	uds_uint8_t (*service_get)(UDS_N_Services_t *res,
-							   uds_uint8_t *buf);
-	uds_int8_t  (*USData_request)(void *pdata);
-	uds_int8_t  (*time_ctl_stop)(UDS_S_Time_Name_e time);
-	uds_int8_t  (*time_ctl_run)(UDS_S_Time_Name_e time);
-	uds_int8_t  (*time_ctl_restart)(UDS_S_Time_Name_e time);
-	uds_int8_t  (*time_ctl_reset)(UDS_S_Time_Name_e time);
-	uds_int8_t	(*time_status_get)(UDS_S_Time_Name_e time);
+	void 		 (*time_manage_handle)(void);
+	void		 (*main_proc)(void);
+	uds_int8_t	 (*init)(void);
+	uds_uint8_t  (*service_get)(UDS_N_Services_t *res,
+								uds_uint8_t *buf);
+	uds_int8_t   (*USData_request)(void *pdata);
+	uds_int8_t   (*ParaChange_request)(void *pdata);
+	uds_int8_t   (*time_ctl_stop)(UDS_S_Time_Name_e time);
+	uds_int8_t   (*time_ctl_run)(UDS_S_Time_Name_e time);
+	uds_int8_t   (*time_ctl_restart)(UDS_S_Time_Name_e time);
+	uds_int8_t   (*time_ctl_reset)(UDS_S_Time_Name_e time);
+	uds_int8_t   (*time_status_get)(UDS_S_Time_Name_e time);
+	uds_uint16_t (*time_value_get)(UDS_S_Time_Name_e time);
 } UDS_Session_Interface_t;//UDS session interface 
+
 
 typedef struct
 {
 	void		(*main_proc)(void);
 	uds_int8_t	(*init)(void);
+	uds_int8_t	(*DTC_add_iterm)(DTCNode_Config *dtc_iterm);
 } UDS_App_Interface_t;//UDS app interface 
+
+typedef struct
+{
+	uds_int8_t	(*init)(void);
+	uds_int8_t	(*read)(UDS_EE_Tag_e tag,uds_uint8_t *buf);
+	uds_int8_t	(*write)(UDS_EE_Tag_e tag,uds_uint8_t *buf);
+} UDS_EEPROM_Interface_t;//UDS eeprom interface 
 
 
 typedef struct
@@ -839,6 +1173,7 @@ typedef struct
 	UDS_Network_Interface_t	Network;	//Network
 	UDS_Session_Interface_t	Session;	//Session
 	UDS_App_Interface_t		Application;//Application
+	UDS_EEPROM_Interface_t	Eeprom;		//EEPROM
 } UDS_Interface_In_t;//UDS interface 
 
 typedef struct
@@ -846,6 +1181,12 @@ typedef struct
 	uds_uint8_t (*can_send_hook)(uds_uint32_t id,
 								 uds_uint8_t length,
 								 uds_uint8_t *data);
+	uds_int8_t  (*eeprom_read)(uds_uint32_t offset,
+							   uds_uint16_t length,
+							   uds_uint8_t *data);
+	uds_int8_t  (*eeprom_write)(uds_uint32_t offset,
+								uds_uint16_t length,
+								uds_uint8_t *data);
 
 } UDS_Interface_Ext_t;//UDS interface
 

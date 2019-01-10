@@ -11,6 +11,8 @@ void uds_init(void);
 void uds_time_handle(void);
 //UDS process main
 void uds_proc_main(void);
+//UDS add DTC
+uds_int8_t uds_add_DTC(DTCNode_Config *dtc_iterm);
 
 #endif
 

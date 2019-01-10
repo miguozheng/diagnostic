@@ -114,6 +114,20 @@ UDS_N_USData_Request_t usdata_request[] =
 },
 
 };
+unsigned char *ch_char[] = 
+{
+	"N_PARA_CH_STmin",//Send time min
+	"N_PARA_CH_BS",		//Block size
+	"N_PARA_CH_ERROR"		//type end
+
+};
+unsigned char *ch_result_char[] = 
+{
+	"N_PARA_CHANGE_OK",	//Execution has completed successfully
+	"N_PARA_RX_ON",			//The service did not execute since a reception of the message identified by <AI> was taking place
+	"N_PARA_WRONG_PARAMETER",	//Undefined <Parameter>
+	"N_PARA_WRONG_VALUE"		//Out of range <Parameter_Value>
+};
 
 unsigned char *result_char[] = 
 {
@@ -153,6 +167,16 @@ void print_time(void)
 
 }
 
+unsigned char *get_ch_char(int res)
+{
+	return ch_char[res];
+}
+
+unsigned char *get_ch_result_char(int res)
+{
+	return ch_result_char[res];
+}
+
 unsigned char *get_result_char(int res)
 {
 	return result_char[res];
@@ -173,6 +197,13 @@ void thread_time_ctl(void *argv)
 		usleep(1000);
 	}
 }
+UDS_N_Change_Parameters_Request_t parach = 
+{
+	{0x01,0x02,0x03,0x04},
+	0,
+	0xFB
+};
+
 void thread_message_send(void *argv)
 {
 	unsigned int i = 0,frame_cnt = 0,ch = 6,time_cnt = 0;
@@ -180,6 +211,8 @@ void thread_message_send(void *argv)
 	while(1){
 #if 1
 		sleep(1);
+		//UDS_S_service_process_ParaChange_request((void *)&parach);
+
 		if(frame_cnt >= 2){
 			frame_cnt = 0;
 		}
@@ -250,6 +283,20 @@ void thread_usd_get_proc(void *argv)
 //				printf("                            N_TA = 0x%2x\n",pservice.USData_confirm.Info.N_TA);
 //				printf("                        N_TAtype = %d\n",pservice.USData_confirm.Info.N_TAtype);
 //				printf("                        N_Result = %s\n",res);
+//			}
+//			if(N_CHANGE_PARAMETER_CONFIRM == i){
+//				cnt++;
+//				res = get_ch_result_char(pservice.Change_parameters_confirm.Result_ChangeParameter);
+//				printf("Got the %d N_ChangeParameter.confirm:\n",cnt);
+//				printf("                           Mtype = %d\n",pservice.Change_parameters_confirm.Info.Mtype);
+//				printf("                            N_SA = 0x%2x\n",pservice.Change_parameters_confirm.Info.N_SA);
+//				printf("                            N_TA = 0x%2x\n",pservice.Change_parameters_confirm.Info.N_TA);
+//				printf("                        N_TAtype = %d\n",pservice.Change_parameters_confirm.Info.N_TAtype);
+//				res = get_ch_char(pservice.Change_parameters_confirm.Parameter);
+//				printf("                       Parameter = %s\n",res);
+//				res = get_ch_result_char(pservice.Change_parameters_confirm.Result_ChangeParameter);
+//				printf("          Result_ChangeParameter = %s\n",res);
+//				
 //			}
 		}while(i < N_TYPE_ERROR);
 		sleep(1);

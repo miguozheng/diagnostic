@@ -28,7 +28,8 @@ SET(SRC_LIST
 	uds_session_layer.c
 	uds_application_layer.c
 	uds_interface_internal.c
-	uds_interface_ext.c)
+	uds_interface_ext.c
+	uds_eeprom.c)
 INCLUDE(FindPkgConfig)#∆Ù”√pkgconfig
 PKG_CHECK_MODULES(GLIB glib-2.0 REQUIRED)#≤È’“glib
 INCLUDE_DIRECTORIES(/usr/include)

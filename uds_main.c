@@ -24,6 +24,8 @@ static void (*uds_session_time_manage_handle)(void);
 static void (*uds_network_proc)(void);
 static void (*uds_session_proc)(void);
 static void (*uds_application_proc)(void);
+static uds_int8_t (*_uds_add_DTC)(DTCNode_Config *dtc_iterm);
+
 
 static uds_int8_t (*uds_can_data_push)(uds_uint32_t id,
 									   uds_uint8_t length,
@@ -78,6 +80,18 @@ static void uds_self_regist(void)
 	}
 
 }
+uds_int8_t uds_add_DTC(DTCNode_Config *dtc_iterm)
+{
+	uds_int8_t ret = -1;
+
+	if(_uds_add_DTC){
+		ret = _uds_add_DTC(dtc_iterm);
+	}else{
+		UDS_PRINTF("UDS Error:Try again after UDS init complete!\n\r");
+	}
+
+	return ret;
+}
 
 
 void uds_init(void)
@@ -114,11 +128,20 @@ void uds_init(void)
 			UDS_PRINTF("UDS Error:Application layer init failed!\n\r");
 		}
 	}
+	if(inf->Application.DTC_add_iterm){
+		_uds_add_DTC = inf->Application.DTC_add_iterm;
+	}
 	if(1 != ret){
 		//Forbidden run uds
 		UDS_run_enable |= 0x01;
 	}
-
+	//eeprom init
+	if(inf->Eeprom.init){
+		ret = inf->Eeprom.init();
+		if(1 != ret){
+			UDS_PRINTF("UDS Error:EEPROM init failed!\n\r");
+		}
+	}
 	//self regist
 	uds_self_regist();
 }

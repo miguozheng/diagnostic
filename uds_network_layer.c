@@ -99,6 +99,10 @@ static uds_int8_t UDS_N_generate_USData_indication(UDS_N_Services_t *service,
 static uds_int8_t UDS_N_generate_USData_FF_indication(UDS_N_PDU_t *pdu);
 static uds_int8_t UDS_N_generate_USData_confirm(UDS_N_Services_t *service,
 												UDS_N_Result_e result);
+static uds_int8_t UDS_N_generate_ChangeParameter_confirm(UDS_N_Services_t *service,
+														 UDS_N_Change_Parameters_Request_t *request,
+														 UDS_N_Result_Change_Parameter_e result);
+
 static uds_int8_t UDS_N_rx_ctl_set_status(UDS_N_Rx_Status_e status);
 static uds_int8_t UDS_N_tx_ctl_set_status(UDS_N_Tx_Status_e status);
 static uds_uint8_t UDS_N_ctl_service_is_busy(void);
@@ -162,6 +166,8 @@ static uds_int8_t UDS_N_tx_FC_OVLFW_deal(void *pdata);
 static uds_int8_t UDS_N_tx_FC_deal(void *pdata);
 static uds_int8_t UDS_N_rx_message_process_normal(void *pdata);
 static uds_int8_t UDS_N_rx_message_process_muilt_frame(void *pdata);
+static uds_int8_t UDS_N_rx_CF_length_check(void *pdata);
+static uds_int8_t UDS_N_rx_frame_check(void *pdata);
 static uds_int8_t UDS_N_rx_message_process(void *pdata);
 static uds_int8_t UDS_N_tx_message_process_muilt_frame(void *pdata);
 static uds_int8_t UDS_N_tx_message_process(void *pdata);
@@ -814,6 +820,32 @@ static uds_int8_t UDS_N_generate_USData_confirm(UDS_N_Services_t *service,
 	return ret;
 }
 
+//Generate ChangeParameter.confirm
+static uds_int8_t UDS_N_generate_ChangeParameter_confirm(UDS_N_Services_t *service,
+														 UDS_N_Change_Parameters_Request_t *request,
+														 UDS_N_Result_Change_Parameter_e result)
+{
+	uds_int8_t ret = -1;
+	UDS_N_Services_t *pconfirm = service;
+	UDS_N_Change_Parameters_Request_t *pservice = request;
+
+	if((!pconfirm) || (!pservice)){
+	  return ret;
+	}
+
+#ifdef ADDRESS_EXTENSION_MODE
+	pconfirm->Change_parameters_confirm.Info.N_AE			   = pservice->Info.N_AE;
+#endif
+	pconfirm->Change_parameters_confirm.Info.Mtype			   = pservice->Info.Mtype;
+	pconfirm->Change_parameters_confirm.Info.N_SA			   = pservice->Info.N_SA;
+	pconfirm->Change_parameters_confirm.Info.N_TA			   = pservice->Info.N_TA;
+	pconfirm->Change_parameters_confirm.Info.N_TAtype		   = pservice->Info.N_TAtype;
+	pconfirm->Change_parameters_confirm.Parameter			   = pservice->Parameter;
+	pconfirm->Change_parameters_confirm.Result_ChangeParameter = result;
+	ret = 1;
+
+	return ret;
+}
 
 static void UDS_N_rx_ctl_clear(void)
 {
@@ -1413,8 +1445,13 @@ static uds_int8_t UDS_N_rx_SF_deal(void *pdata)
 
 		pnetwork_ctl->Rx_service_info.Mtype = MTYPE_DIAGNOSTICS;
 		pnetwork_ctl->Rx_service_info.N_SA = data_pdu->ID;
-		pnetwork_ctl->Rx_service_info.N_TA = UDS_DIAGNOSTICS_PHYSICAL_ID;
-		pnetwork_ctl->Rx_service_info.N_TAtype = N_TATYPE_PHYSICAL;
+		if(UDS_DIAGNOSTICS_FUNCTIONAL_ID == data_pdu->ID){
+			pnetwork_ctl->Rx_service_info.N_TAtype = N_TATYPE_FUNCTIONAL;
+			pnetwork_ctl->Rx_service_info.N_TA = (uds_uint8_t)UDS_DIAGNOSTICS_FUNCTIONAL_ID;
+		}else{
+			pnetwork_ctl->Rx_service_info.N_TAtype = N_TATYPE_PHYSICAL;
+			pnetwork_ctl->Rx_service_info.N_TA = (uds_uint8_t)UDS_DIAGNOSTICS_PHYSICAL_ID;
+		}
 		#ifdef ADDRESS_EXTENSION_MODE	
 		pnetwork_ctl->Rx_service_info.N_AE = 0;
 		#endif
@@ -1426,10 +1463,10 @@ static uds_int8_t UDS_N_rx_SF_deal(void *pdata)
 												   buf);
 			if(1 == ret){
 				ret = UDS_N_issue_to_upper_put(N_USDATA_INDICATION,&Network_service);
-			
 			}
 		}
 	}
+	UDS_N_rx_ctl_set_status(N_STS_RX_IDLE);
 	UDS_N_rx_ctl_clear();
 	UDS_N_rx_info_clear();
 	
@@ -1494,11 +1531,17 @@ static uds_int8_t UDS_N_rx_FF_deal(void *pdata)
 			UDS_N_rx_ctl_reset_for_new(length);
 			pnetwork_ctl->Rx_service_info.Mtype = MTYPE_DIAGNOSTICS;
 			pnetwork_ctl->Rx_service_info.N_SA = data_pdu->ID;
-			pnetwork_ctl->Rx_service_info.N_TA = UDS_DIAGNOSTICS_PHYSICAL_ID;
-			pnetwork_ctl->Rx_service_info.N_TAtype = N_TATYPE_PHYSICAL;
+			if(UDS_DIAGNOSTICS_FUNCTIONAL_ID == data_pdu->ID){
+				pnetwork_ctl->Rx_service_info.N_TAtype = N_TATYPE_FUNCTIONAL;
+				pnetwork_ctl->Rx_service_info.N_TA = (uds_uint8_t)UDS_DIAGNOSTICS_FUNCTIONAL_ID;
+			}else{
+				pnetwork_ctl->Rx_service_info.N_TAtype = N_TATYPE_PHYSICAL;
+				pnetwork_ctl->Rx_service_info.N_TA = (uds_uint8_t)UDS_DIAGNOSTICS_PHYSICAL_ID;
+			}
 			#ifdef ADDRESS_EXTENSION_MODE	
 			pnetwork_ctl->Rx_service_info.N_AE = 0;
 			#endif
+			UDS_N_rx_ctl_set_status(N_STS_RX_MULTI_FRAME);
 			//push FF data to buffer
 			ret |= UDS_N_rx_push_data_to_buffer(data_pdu->Frame.FF.N_Data,FF_DATA_LENGTH);
 			//issue upper layer
@@ -1864,6 +1907,62 @@ static uds_int8_t UDS_N_rx_message_process_muilt_frame(void *pdata)
 	return ret;
 }
 
+//for canoe uds test
+static uds_int8_t UDS_N_rx_CF_length_check(void *pdata)
+{
+	uds_int8_t ret = -1;
+	UDS_N_PDU_Pool_t *data_pdu = (UDS_N_PDU_Pool_t *)pdata;
+	UDS_N_Control_t *pnetwork_ctl = &Network_ctl;
+	uds_uint16_t untransmit_byte;
+
+	untransmit_byte = pnetwork_ctl->Rx_frame_ctl.Buffer_pointer_target - pnetwork_ctl->Rx_frame_ctl.Buffer_pointer_current;
+
+	if(CF_DATA_LENGTH <= untransmit_byte){//not the end frame
+		if(8 == data_pdu->PDU.Length){
+			ret = 1;
+		}
+	}else{
+		untransmit_byte = untransmit_byte + 8 - CF_DATA_LENGTH;
+		if(untransmit_byte < data_pdu->PDU.Length){
+			ret = 1;
+		}
+	}
+
+	return ret;
+}
+
+static uds_int8_t UDS_N_rx_frame_check(void *pdata)
+{
+	UDS_N_PDU_Pool_t *pmessage = (UDS_N_PDU_Pool_t *)pdata;
+	uds_int8_t ret = -1;
+
+	switch(pmessage->PDU.Frame.PCI.PCI_Bit.PCItype){
+		case N_PDU_NAME_SF:
+			if(pmessage->PDU.Length > pmessage->PDU.Frame.SF.PCI_Bit.DL){
+				ret = 1;
+			}
+			break;
+		case N_PDU_NAME_FF:
+			if(8 == pmessage->PDU.Length){
+				ret = 1;
+			}
+			break;
+		case N_PDU_NAME_CF:
+			if(1 == UDS_N_rx_CF_length_check(pmessage)){
+				ret = 1;
+			}
+			break;
+		case N_PDU_NAME_FC:
+			if(pmessage->PDU.Length > (8 - FC_DATA_LENGTH)){
+				ret = 1;
+			}
+			break;			
+		default:break;
+	}
+
+	return ret;
+}
+
 static uds_int8_t UDS_N_rx_message_process(void *pdata)
 {
 	UDS_N_PDU_Pool_t *pmessage = (UDS_N_PDU_Pool_t *)pdata;
@@ -1873,18 +1972,20 @@ static uds_int8_t UDS_N_rx_message_process(void *pdata)
 	if(!pmessage){
 		return ret;
 	}
-	
-	switch(sts){
-		case N_STS_RX_IDLE:
-			ret = UDS_N_rx_message_process_normal((void *)&pmessage->PDU);
-			break;
-		case N_STS_RX_MULTI_FRAME:
-			ret = UDS_N_rx_message_process_muilt_frame((void *)&pmessage->PDU);
-			break;
-		case N_STS_RX_ERR:
 
-			break;
-		default:break;
+	if(1 == UDS_N_rx_frame_check(pdata)){
+		switch(sts){
+			case N_STS_RX_IDLE:
+				ret = UDS_N_rx_message_process_normal((void *)&pmessage->PDU);
+				break;
+			case N_STS_RX_MULTI_FRAME:
+				ret = UDS_N_rx_message_process_muilt_frame((void *)&pmessage->PDU);
+				break;
+			case N_STS_RX_ERR:
+		
+				break;
+			default:break;
+		}
 	}
 	//free pointer
 	UDS_N_pool_pointer_free(N_POOL_TYPE_PDU,pmessage);
@@ -1919,6 +2020,23 @@ static uds_int8_t UDS_N_tx_message_process_muilt_frame(void *pdata)
 	return ret;
 }
 
+static uds_int8_t UDS_N_tx_frame_check(void *pdata)
+{
+	UDS_N_PDU_Pool_t *pmessage = (UDS_N_PDU_Pool_t *)pdata;
+	uds_int8_t ret = -1;
+
+	switch(pmessage->PDU.Frame.PCI.PCI_Bit.PCItype){
+		case N_PDU_NAME_FC:
+			if(pmessage->PDU.Length > (8 - FC_DATA_LENGTH)){
+				ret = 1;
+			}
+			break;			
+		default:break;
+	}
+
+	return ret;
+}
+
 static uds_int8_t UDS_N_tx_message_process(void *pdata)
 {
 	UDS_N_PDU_Pool_t *pmessage = (UDS_N_PDU_Pool_t *)pdata;
@@ -1928,21 +2046,23 @@ static uds_int8_t UDS_N_tx_message_process(void *pdata)
 	if(!pmessage){
 		return ret;
 	}
-	
-	switch(sts){
-		case N_STS_TX_IDLE:
-			
-			break;
-		case N_STS_TX_WAIT_FC:
-			ret = UDS_N_tx_message_process_muilt_frame((void *)&pmessage->PDU);
-			break;
-		case N_STS_TX_MULTI_FRAME_IN_TRANSMIT:
 
-			break;
-		case N_STS_TX_ERR:
-
-			break;
-		default:break;
+	if(0 < UDS_N_tx_frame_check(pdata)){
+		switch(sts){
+			case N_STS_TX_IDLE:
+				
+				break;
+			case N_STS_TX_WAIT_FC:
+				ret = UDS_N_tx_message_process_muilt_frame((void *)&pmessage->PDU);
+				break;
+			case N_STS_TX_MULTI_FRAME_IN_TRANSMIT:
+		
+				break;
+			case N_STS_TX_ERR:
+		
+				break;
+			default:break;
+		}
 	}
 	//free pointer
 	UDS_N_pool_pointer_free(N_POOL_TYPE_PDU,pmessage);
@@ -2038,6 +2158,59 @@ uds_int8_t UDS_N_service_process_USData_request(void *pdata)
 	
 	return ret;
 }
+
+/**********************************************************************
+* @brief	   Push the UDS_N_service_process_ChangeParameters_request
+			   service message to network.
+*
+* @param[in]   pdata:UDS_N_service_process_ChangeParameters_request
+			   pointer for transmit.
+*
+* @return	   1    :success 
+*			   other:busy
+**********************************************************************/
+uds_int8_t UDS_N_service_process_ChangeParameters_request(void *pdata)
+{
+	UDS_N_Change_Parameters_Request_t *pmessage = (UDS_N_Change_Parameters_Request_t *)pdata;
+	uds_int8_t ret = -1;
+	UDS_N_Change_Parameter_e res;
+	UDS_N_FC_Para_t *para = &Rx_FC_para;
+
+	if(!pmessage){
+		return ret;
+	}
+
+	if(N_STS_RX_MULTI_FRAME == UDS_N_rx_ctl_get_status()){
+		res = N_PARA_RX_ON;
+	}else{
+		switch(pmessage->Parameter){
+			case N_PARA_CH_STmin:
+				if((0x80 > pmessage->Parameter_Value)
+					|| ((0xF0 < pmessage->Parameter_Value) && (0xFA > pmessage->Parameter_Value))){
+					para->STmin = pmessage->Parameter_Value;
+					res = N_PARA_CHANGE_OK;
+				}else{
+					res = N_PARA_WRONG_VALUE;
+				}
+				break;
+			case N_PARA_CH_BS:
+				para->BS = pmessage->Parameter_Value;
+				res = N_PARA_CHANGE_OK;
+				break;
+			default:
+				res = N_PARA_WRONG_PARAMETER;
+				break;
+		}
+	}
+
+	ret = UDS_N_generate_ChangeParameter_confirm(&Network_service,pmessage,res);
+	if(1 == ret){
+		ret = UDS_N_issue_to_upper_put(N_CHANGE_PARAMETER_CONFIRM,&Network_service);
+	}
+	
+	return 1;
+}
+
 
 //Service process
 static uds_int8_t UDS_N_service_process(void *pdata)
@@ -2274,12 +2447,12 @@ static void UDS_N_send_manage_deal(void)
 		case N_STS_TX_WAIT_SEND_OK:
 			break;
 		case N_STS_TX_SEND_SF:
-			//generate FF frame
+			//generate SF frame
 			ret = UDS_N_tx_generate_SF_frame(&pdu);
 			if(1 > ret){
 				UDS_PRINTF("UDS Error:generate SF frame fialed!\n\r");
 			}
-			//push FF to send
+			//push SF to send
 			if(1 == ret){
 				ret = UDS_N_push_to_can_send_list(pdu);
 			}

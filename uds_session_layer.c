@@ -34,8 +34,10 @@ static UDS_S_Count_Status_t Session_Time_Man[S_TIME_NAME_ALL];
 */
 static UDS_S_Count_Status_t *UDS_S_time_pointer_get(uds_uint8_t time_type);
 static void UDS_S_time_manage_init(void);
-uds_uint8_t (*S_service_get)(UDS_N_Services_t *res,uds_uint8_t *buf);
-uds_int8_t (*S_USData_request)(void *pdata);
+static uds_uint8_t (*S_service_get)(UDS_N_Services_t *res,uds_uint8_t *buf);
+static uds_int8_t (*S_USData_request)(void *pdata);
+static uds_int8_t (*S_ParaChange_request)(void *pdata);
+
 
 /*
 ============================================================================
@@ -135,6 +137,19 @@ uds_int8_t UDS_S_time_status_get(UDS_S_Time_Name_e time)
 	
 	return ret;
 }
+//Get time value
+uds_uint16_t UDS_S_time_value_get(UDS_S_Time_Name_e time)
+{
+	UDS_S_Count_Status_t	*ptime = UDS_S_time_pointer_get(time);
+	uds_int8_t ret = -1;
+
+	if(!ptime){
+		return ret;
+	}
+	
+	return ptime->Target;
+}
+
 //Time init
 static void UDS_S_time_manage_init(void)
 {
@@ -168,6 +183,29 @@ uds_int8_t UDS_S_service_process_USData_request(void *pdata)
 
 	if(S_USData_request){
 		ret = S_USData_request(pmessage);
+	}
+	
+	return ret;
+}
+/**********************************************************************
+* @brief	   Push the Parachange.resuest service message to network.
+*
+* @param[in]   pdata:UDS_N_USData_Request_t pointer for transmit.
+*
+* @return	   1    :success 
+*			   other:busy
+**********************************************************************/
+uds_int8_t UDS_S_service_process_ParaChange_request(void *pdata)
+{
+	void *pmessage = pdata;
+	uds_int8_t ret = -1;
+
+	if(!pmessage){
+		return ret;
+	}
+
+	if(S_ParaChange_request){
+		ret = S_ParaChange_request(pmessage);
 	}
 	
 	return ret;
@@ -256,7 +294,14 @@ uds_int8_t UDS_S_init(void)
 		S_USData_request = UDS_NULL;
 		UDS_PRINTF("UDS Error:Session layer USData_request regist failed£¡\n\r");
 	}
-	
+	if(intf->Network.ParaChange_request){
+		S_ParaChange_request = intf->Network.ParaChange_request;
+	}else{
+		ret = -1;
+		S_ParaChange_request = UDS_NULL;
+		UDS_PRINTF("UDS Error:Session layer ParaChange_request regist failed£¡\n\r");
+	}
+    
 	return ret;
 }
 /**********************************************************************
