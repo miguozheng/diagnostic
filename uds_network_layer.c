@@ -668,7 +668,13 @@ uds_int8_t UDS_N_can_data_put(uds_uint32_t id,
 	if((!tpool) || (!pdata)){
 		return ret;
 	}
-
+    //Filted the functional muilt-frame
+	if(UDS_DIAGNOSTICS_FUNCTIONAL_ID == id){
+		if(data[0] & 0xF0){
+			return 0;
+		}
+	}
+	
 	ret = 0;
 	tpool->PDU.ID = id;
 	tpool->PDU.Length = length;
@@ -2127,6 +2133,29 @@ static void UDS_N_can_send_data_deal(void)
 		UDS_N_can_send_process(pdata);
 	}
 }
+
+uds_int8_t UDS_N_send_frame_direct(uds_uint32_t id,uds_uint8_t length,uds_uint8_t *data)
+{
+	uds_int8_t ret = -1,i;
+	UDS_N_PDU_Pool_t *pdu = (UDS_N_PDU_Pool_t *)UDS_N_pool_pointer_get(N_POOL_TYPE_PDU);
+	uds_uint16_t temp;
+	UDS_N_Service_Info_Pub_t *pservice_info = (UDS_N_Service_Info_Pub_t *)UDS_N_tx_ctl_sevice_info_get();
+	
+	if((!pdu) || (8 < length) || (!data)){
+		return ret;
+	}
+	
+	pdu->PDU.ID = id;
+	pdu->PDU.Length = length;
+	for(i = 0;i < length ;i++){
+		pdu->PDU.Frame.Data[i] = data[i];
+	}
+	pdu->Hook = 0;
+	ret = UDS_N_push_to_can_send_list(pdu);
+	
+	return ret;
+}
+
 /**********************************************************************
 * @brief	   Push the USData.resuest service message to network.
 *

@@ -54,13 +54,19 @@ const UDS_EE_Info_t EE_add_table[EE_TAG_ALL] =
  Function declear
 ============================================================================
 */
-static uds_int8_t (*UDS_EE_add_read)(uds_uint32_t offset,
-									 uds_uint16_t length,
-									 uds_uint8_t *buf);
-static uds_int8_t (*UDS_EE_add_write)(uds_uint32_t offset,
+static uds_int8_t (*_UDS_EE_add_read)(uds_uint32_t offset,
 									  uds_uint16_t length,
 									  uds_uint8_t *buf);
+static uds_int8_t (*_UDS_EE_add_write)(uds_uint32_t offset,
+									   uds_uint16_t length,
+									   uds_uint8_t *buf);
 
+static uds_int8_t UDS_EE_add_read(uds_uint32_t offset,
+								  uds_uint16_t length,
+								  uds_uint8_t *buf);
+static uds_int8_t UDS_EE_add_write(uds_uint32_t offset,
+								   uds_uint16_t length,
+								   uds_uint8_t *buf);
 
 /*
 ============================================================================
@@ -73,18 +79,46 @@ uds_int8_t UDS_EE_init(void)
 	UDS_Interface_Ext_t *inf = (UDS_Interface_Ext_t *)get_uds_ext_interface();
 
 	if(inf->eeprom_read){
-		UDS_EE_add_read = inf->eeprom_read;
+		_UDS_EE_add_read = inf->eeprom_read;
 	}else{
+		_UDS_EE_add_read = 0;
 		ret |= -1;
 	}
 	if(inf->eeprom_write){
-		UDS_EE_add_write = inf->eeprom_write;
+		_UDS_EE_add_write = inf->eeprom_write;
 	}else{
+		_UDS_EE_add_write = 0;
 		ret |= -1;
 	}
 
 	return ret;
 }
+
+static uds_int8_t UDS_EE_add_read(uds_uint32_t offset,
+								  uds_uint16_t length,
+								  uds_uint8_t *buf)
+{
+	uds_int8_t ret = -1;
+
+	if(_UDS_EE_add_read){
+		ret = _UDS_EE_add_read(offset,length,buf);
+	}
+
+	return ret;
+}
+static uds_int8_t UDS_EE_add_write(uds_uint32_t offset,
+								   uds_uint16_t length,
+								   uds_uint8_t *buf)
+{
+   uds_int8_t ret = -1;
+
+   if(_UDS_EE_add_write){
+	   ret = _UDS_EE_add_write(offset,length,buf);
+   }
+
+   return ret;
+}
+
 
 
 uds_int8_t UDS_EE_tag_read(UDS_EE_Tag_e tag,uds_uint8_t *buf)

@@ -459,6 +459,14 @@ typedef struct
 #define NO_TAG 0U
 #endif
 
+/*Test variable*/
+#define VEHICLESPEED_TEST 73U
+#define ENGINERPM_TEST 2498U
+#define VOLTAGE_TEST 13501U
+
+/*UUDT-ID*/
+#define PERIODICDID_SEND_ID UDS_DIAGNOSTICS_PERIODIC_ID
+
 /*诊断服务*/
 #define NUMBEROFSERVICE 21U				//支持的诊断服务数量---暂定
 #define MAXKEYERRORPERMITCOUNT 3U		//最大密钥失败允许次数---暂定
@@ -467,7 +475,7 @@ typedef struct
 #define NUMOFREADDID 50U				//ECU支持的ReadDataByIdentifier与ReadDataByPeriodicIdentifier，DID个数---暂定
 #define MAXNUMBEROFPERIODICDID 10U		//一次请求周期数据标识符允许的最大个数---暂定
 
-#define MAX_DTC_NUMBER 14U				//ECU支持的最大DTC数目---暂定
+#define MAX_DTC_NUMBER 3U				//ECU支持的最大DTC数目---暂定-Test
 #define MAX_DTCGROUP_NUMBER 5U			//ECU支持的最大DTC组数目---暂定
 #define MAX_DTC_EEPROM_BYTES 1U			//每个DTC需要保存的字节数，DTC状态+DTC扩展数据---暂定
 #define MAX_RECORDNUMBER_NUMBER 3U		//Snapshot的最大Recordnumber---暂定
@@ -875,9 +883,27 @@ typedef enum {
 	Routine_Completed_unsuccessfully 
 } RoutineProcessStatus_e;
 
+typedef enum {
+	Transfer_Init = 0,
+	Transfer_Wait_Download,
+	Transfer_Wait_Upload,
+	Transfer_Complete
+} DownloadUploadStep_e;
+	
 typedef void(*ServiceHandler)(void);	
 typedef uds_uint8_t (*DetectCondition)(void);
 typedef RoutineProcessStatus_e (*RoutineRun)(RoutineControlType_e RoutineControlType);
+
+typedef struct {
+	DownloadUploadStep_e DownloadUploadStep;
+	uds_uint8_t DataFormatIdentifier;
+	uds_uint8_t DataBlockSequenceCounter;
+	uds_uint32_t DataDownloadLength;
+	uds_uint8_t DataUploadCounter;
+	uds_uint32_t DataUploadTimes;
+	uds_uint8_t* memoryAddress;
+	uds_uint32_t memorySize;
+} DataTransfer_t;
 
 typedef struct {
 	uds_uint16_t RoutineIdentifier;
@@ -913,6 +939,7 @@ typedef struct {
 typedef struct {
 	uds_uint8_t Support;
 	DiagnosticService_e ServiceID;			//诊断服务ID
+	uds_uint8_t MinDataLength;
 	uds_uint8_t NumOfSubfunc;				//子服务数目
 	uds_uint8_t PHYDefaultSession_Security;	//security suppport in default session physical address
 	uds_uint8_t PHYProgramSeesion_Security;	//security suppport in program session physical address
@@ -1167,6 +1194,9 @@ typedef struct
 							   uds_uint8_t *buf);
 	uds_int8_t  (*USData_request)(void *pdata);
 	uds_int8_t  (*ParaChange_request)(void *pdata);
+	uds_int8_t  (*can_direct_send)(uds_uint32_t id,
+								   uds_uint8_t length,
+								   uds_uint8_t *data);
 } UDS_Network_Interface_t;//UDS network interface 
 
 typedef struct

@@ -24,7 +24,8 @@ const UDS_Interface_In_t uds_interface_in_table =
 		.can_push_data		= UDS_N_can_data_put,
 		.service_get		= UDS_N_service_get,
 		.USData_request		= UDS_N_service_process_USData_request,
-		.ParaChange_request = UDS_N_service_process_ChangeParameters_request
+		.ParaChange_request = UDS_N_service_process_ChangeParameters_request,
+		.can_direct_send	= UDS_N_send_frame_direct
 	},
 
 	{
@@ -66,7 +67,8 @@ const UDS_Interface_In_t uds_interface_in_table =
 		UDS_N_can_data_put,
 		UDS_N_service_get,
 		UDS_N_service_process_USData_request,
-		UDS_N_service_process_ChangeParameters_request
+		UDS_N_service_process_ChangeParameters_request,
+		UDS_N_send_frame_direct
 	},
 
 	{

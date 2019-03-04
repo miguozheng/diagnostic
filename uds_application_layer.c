@@ -14,11 +14,13 @@ static UDS_A_Request_t UDS_A_Request_SDU;
 static UDS_A_Session_Time_Control_t Session_ctl;
 uds_uint8_t SDUReceiveBuffArray[MAXDATALENGTH] = { 0 };
 uds_uint8_t SDUSendBuffArray[MAXDATALENGTH] = { 0 };
+uds_uint8_t SDUSendBuffArray_0X2A[8] = { 0 };
 static uds_uint8_t DataLoad_DefaultValue[10] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };  //暂定
 
 /*服务处理*/
 static NegativeResposeCode NRC;
 static uds_uint16_t ResponseDataLength;
+static uds_uint8_t ResponseDataLength_0x2A;
 static uds_uint8_t ServiceSubFunc;
 static uds_uint8_t SuppressPosRspMsgIndicationBit;
 static uds_uint8_t ECUResetType;
@@ -30,6 +32,7 @@ static uds_uint8_t WaitConfirmBeforeDTCUpdateEnable = UDS_FALSE;
 static uds_uint8_t WaitConfirmBeforeDTCUpdateDisable = UDS_FALSE;
 static LinkControlStep_e LinkControlStep = WAIT_MODE_REQ;
 static LinkStatus_t LinkStatus;
+static DataTransfer_t DataTransfer;
 
 /*DTC*/
 static uds_uint8_t DTCStatusAvailabilityMask; //provides an indication of DTC status bits that are supported by the server for masking purposes
@@ -46,9 +49,9 @@ static uds_uint8_t FaultPendingCounterRecord = INVALID_DTCEXTDATARECORDNUMBER; /
 static uds_uint8_t FaultAgingCounterRecord = INVALID_DTCEXTDATARECORDNUMBER; //范围0x01-0x8F
 static uds_uint8_t FaultAgedCounterRecord = INVALID_DTCEXTDATARECORDNUMBER; //范围0x01-0x8F
 
-uds_uint8_t VehicleSpeed = 80; //km/h-预留
-uds_uint16_t EngineRPM = 2000; //rpm-预留
-uds_uint16_t Voltage = 1350; //mv-预留
+uds_uint8_t VehicleSpeed = VEHICLESPEED_TEST; //km/h-预留
+uds_uint16_t EngineRPM = ENGINERPM_TEST; //rpm-预留
+uds_uint16_t Voltage = VOLTAGE_TEST; //mv-预留
 
 /*根据DID写数据*/
 uds_uint8_t Test_RAM_2E;
@@ -79,7 +82,6 @@ static ReadDatabyInentifier_t ReadDIDTable[NUMOFREADDID];
 static uds_uint8_t NumofPeriodicDIDRunning = 0;
 static PeriodicDID_t PeriodicDIDArray;
 static uds_uint8_t PeriodicDIDCnt = 0;
-static uds_uint8_t TempPCI;
 static uds_uint8_t DataBufferPutCycle = DATAPUTCYCLE;
 static uds_uint8_t WaitConfirmBeforePeridDIDSend = UDS_FALSE;
 static uds_uint8_t ConfirmPeridDIDSend = UDS_FALSE;
@@ -120,23 +122,46 @@ struct {
 */
 
 //App get the lower layer service
-static uds_uint8_t (*UDS_A_service_get)(UDS_N_Services_t *res,uds_uint8_t *buf);
+static uds_uint8_t (*_UDS_A_service_get)(UDS_N_Services_t *res,uds_uint8_t *buf);
 //App layer issue a USData.request service
-static uds_int8_t (*UDS_A_service_process_USData_request)(void *pdata);
+static uds_int8_t (*_UDS_A_service_process_USData_request)(void *pdata);
 //App layer issue a ParaChange.request service
-static uds_int8_t (*UDS_A_service_process_ParaChange_request)(void *pdata);
+static uds_int8_t (*_UDS_A_service_process_ParaChange_request)(void *pdata);
 //App get the session layer timer status
-static uds_int8_t (*UDS_A_timer_status_get)(UDS_S_Time_Name_e time);
-static uds_int8_t (*UDS_A_timer_ctl_stop)(UDS_S_Time_Name_e time);
-static uds_int8_t (*UDS_A_timer_ctl_run)(UDS_S_Time_Name_e time);
-static uds_int8_t (*UDS_A_timer_ctl_restart)(UDS_S_Time_Name_e time);
-static uds_int8_t (*UDS_A_timer_ctl_reset)(UDS_S_Time_Name_e time);
-static uds_uint16_t (*UDS_A_timer_value_get)(UDS_S_Time_Name_e time);
+static uds_int8_t (*_UDS_A_timer_status_get)(UDS_S_Time_Name_e time);
+static uds_int8_t (*_UDS_A_timer_ctl_stop)(UDS_S_Time_Name_e time);
+static uds_int8_t (*_UDS_A_timer_ctl_run)(UDS_S_Time_Name_e time);
+static uds_int8_t (*_UDS_A_timer_ctl_restart)(UDS_S_Time_Name_e time);
+static uds_int8_t (*_UDS_A_timer_ctl_reset)(UDS_S_Time_Name_e time);
+static uds_uint16_t (*_UDS_A_timer_value_get)(UDS_S_Time_Name_e time);
 
 //App eeprom
-static uds_int8_t (*UDS_A_eeprom_read)(UDS_EE_Tag_e tag,uds_uint8_t *buf);
-static uds_int8_t (*UDS_A_eeprom_write)(UDS_EE_Tag_e tag,uds_uint8_t *buf);
+static uds_int8_t (*_UDS_A_eeprom_read)(UDS_EE_Tag_e tag,uds_uint8_t *buf);
+static uds_int8_t (*_UDS_A_eeprom_write)(UDS_EE_Tag_e tag,uds_uint8_t *buf);
 
+//send frame directly
+static uds_int8_t (*_UDS_A_send_frame_direct)(uds_uint32_t id,uds_uint8_t length,uds_uint8_t *data);
+
+//App get the lower layer service
+static uds_uint8_t UDS_A_service_get(UDS_N_Services_t *res,uds_uint8_t *buf);
+//App layer issue a USData.request service
+static uds_int8_t UDS_A_service_process_USData_request(void *pdata);
+//App layer issue a ParaChange.request service
+static uds_int8_t UDS_A_service_process_ParaChange_request(void *pdata);
+//App get the session layer timer status
+static uds_int8_t UDS_A_timer_status_get(UDS_S_Time_Name_e time);
+static uds_int8_t UDS_A_timer_ctl_stop(UDS_S_Time_Name_e time);
+static uds_int8_t UDS_A_timer_ctl_run(UDS_S_Time_Name_e time);
+static uds_int8_t UDS_A_timer_ctl_restart(UDS_S_Time_Name_e time);
+static uds_int8_t UDS_A_timer_ctl_reset(UDS_S_Time_Name_e time);
+static uds_uint16_t UDS_A_timer_value_get(UDS_S_Time_Name_e time);
+
+//App eeprom
+static uds_int8_t UDS_A_eeprom_read(UDS_EE_Tag_e tag,uds_uint8_t *buf);
+static uds_int8_t UDS_A_eeprom_write(UDS_EE_Tag_e tag,uds_uint8_t *buf);
+
+//send frame directly
+static uds_int8_t UDS_A_send_frame_direct(uds_uint32_t id,uds_uint8_t length,uds_uint8_t *data);
 
 
 static uds_int8_t UDS_A_interface_regist(UDS_Interface_In_t *intf);
@@ -225,6 +250,14 @@ static void StartRoutine_01Proc(void);
 static void StopRoutine_02Proc(void);
 static void RequestRoutineResults_03Proc(void);
 
+static void Service34Handle(void);
+
+static void Service35Handle(void);
+
+static void Service36Handle(void);
+
+static void Service37Handle(void);
+
 static void Service3DHandle(void);
 
 static void Service3EHandle(void);
@@ -259,7 +292,7 @@ static uds_uint32_t SeedCalc01_Func(uds_uint8_t RequestSeed);
 static uds_uint32_t KeyCalc01_Func(uds_uint32_t RequestSeed);
 static uds_uint32_t SeedCalc03_Func(uds_uint8_t RequestSeed);
 static uds_uint32_t KeyCalc03_Func(uds_uint32_t RequestSeed);
-static uds_uint32_t *ReadMemoryByAddress_Func(uds_uint8_t *Address, uds_uint16_t Length);
+static uds_uint8_t *ReadMemoryByAddress_Func(uds_uint8_t *Address, uds_uint16_t Length);
 static uds_uint32_t ReadMemorySize_Func(uds_uint8_t *Address, uds_uint16_t Length);
 static void DTC_Snapshot_Read_Func(uds_uint8_t SnapShotTag, DTCSnapshot_t TempDTCSnapshot);
 static void DTC_Snapshot_Write_Func(uds_uint8_t SnapShotTag);
@@ -278,7 +311,7 @@ static void AddDID_Init(uds_uint16_t ID, uds_uint8_t* data, uds_uint8_t length, 
 static void AddSourceDataRecord_Init(uds_uint16_t ID, uds_uint8_t Position, uds_uint8_t* data, uds_uint8_t length);
 static uds_uint8_t SearchDTCGroup_Func(uds_uint32_t DTCGroup);
 static DTCNode* SearchDTCNode_Func(uds_uint32_t DtcCode);
-static void DTCStatusAvailabilityMask_Init(uds_uint8_t DTCStatusAvailabilityMask);
+static void DTCStatusAvailabilityMask_Init(uds_uint8_t DTCAvailabilityMask);
 static void FaultAgingCounterRecordNumber_Init(uds_uint8_t RecordNumer);
 static void FaultAgedCounterRecordNumber_Init(uds_uint8_t RecordNumer);
 static void FaultOccurenceCounterRecordNumber_Init(uds_uint8_t RecordNumer);
@@ -296,6 +329,7 @@ static Routine_t* SearchRoutineID_Func(uds_uint16_t RoutineID);
 static RoutineProcessStatus_e RoutineRun_01Func(RoutineControlType_e RoutineControlType);
 static RoutineProcessStatus_e RoutineRun_02Func(RoutineControlType_e RoutineControlType);
 static RoutineProcessStatus_e RoutineRun_03Func(RoutineControlType_e RoutineControlType);
+static uds_uint8_t ProgramWriteData(uds_uint8_t* address, uds_uint8_t* data, uds_uint16_t length);
 
 Initial_SendData_t Initial_SendData_Table[Data_Number] = {
 	{(uds_uint8_t *)&VehicleSpeed, 1},
@@ -307,23 +341,27 @@ Initial_SendData_t Initial_SendData_Table[Data_Number] = {
 Switch_SendData_t Switch_SendData_Table[Data_Number];
 
 DiagService DiagnosticServiceTable[NUMBEROFSERVICE] = {
-	{ UDS_FALSE,	DIAGNOSTICSESSIONCONTROL, 		4, LEVEL_ZERO,		LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO,		 Service10Handle },
-	{ UDS_FALSE,	ECURESET, 						3, LEVEL_UNSUPPORT,	LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_UNSUPPORT,	 LEVEL_ZERO,		LEVEL_ZERO,		 Service11Handle },
-	{ UDS_FALSE,	CLEARDIAGNOSTICINFORMATION,		0, LEVEL_ZERO,		LEVEL_UNSUPPORT, LEVEL_ZERO, 	  LEVEL_ZERO,		 LEVEL_UNSUPPORT,	LEVEL_ZERO,		 Service14Handle },
-	{ UDS_FALSE,	READDTCINFORMATION, 			7, LEVEL_ZERO,		LEVEL_UNSUPPORT, LEVEL_ZERO,	  LEVEL_ZERO,	 	 LEVEL_UNSUPPORT,	LEVEL_ZERO, 	 Service19Handle },
-	{ UDS_FALSE,	READDATABYIDENTIFIER, 			0, LEVEL_ZERO,		LEVEL_ZERO, 	 LEVEL_ZERO,	  LEVEL_ZERO,	 	 LEVEL_ZERO,		LEVEL_ZERO, 	 Service22Handle },
-	{ UDS_FALSE,	READMEMORYBYADDRESS, 			0, LEVEL_ONE,		LEVEL_UNSUPPORT, LEVEL_ONE,	 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service23Handle },
-	{ UDS_FALSE,	SECURITYACCESS, 				4, LEVEL_UNSUPPORT,	LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service27Handle },
-	{ UDS_FALSE,	COMMUNICATIONCONTROL, 			4, LEVEL_UNSUPPORT,	LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_UNSUPPORT,	 LEVEL_ZERO,		LEVEL_ZERO, 	 Service28Handle },
-	{ UDS_FALSE,	READDATABYPERIODICIDENTIFIER, 	4, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, LEVEL_ONE,	 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2AHandle },
-	{ UDS_FALSE,	DYNAMICALLYDEFINEDATAIDENTIFIER,3, LEVEL_UNSUPPORT, LEVEL_UNSUPPORT, LEVEL_ZERO, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2CHandle },
-	{ UDS_FALSE,	WRITEDATABYIDENTIFIER,			0, LEVEL_UNSUPPORT, LEVEL_ONE, 		 LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2EHandle },
-	{ UDS_FALSE,	INPUTOUTPUTCONTROLBYIDENTIFIER, 0, LEVEL_UNSUPPORT, LEVEL_UNSUPPORT, LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2FHandle },
-	{ UDS_FALSE,	ROUTINECONTROL, 				3, LEVEL_UNSUPPORT, LEVEL_ONE, 		 LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service31Handle },
-	{ UDS_FALSE,	WRITEMEMORYBYADDRESS, 			0, LEVEL_UNSUPPORT, LEVEL_UNSUPPORT, LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service3DHandle },
-	{ UDS_FALSE,	TESTERPRESENT, 					1, LEVEL_ZERO,		LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO,		 Service3EHandle },
-	{ UDS_FALSE,	CONTROLDTCSETTING, 				2, LEVEL_UNSUPPORT,	LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_UNSUPPORT,	 LEVEL_ZERO,		LEVEL_ZERO,		 Service85Handle },
-	{ UDS_FALSE,	LINKCONTROL, 					3, LEVEL_UNSUPPORT,	LEVEL_ONE,		 LEVEL_ONE,	  	  LEVEL_UNSUPPORT,	 LEVEL_ONE,			LEVEL_ONE,		 Service87Handle },
+ 	{ UDS_FALSE,	DIAGNOSTICSESSIONCONTROL, 		2, 4, LEVEL_ZERO,		LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO,		 Service10Handle },
+ 	{ UDS_FALSE,	ECURESET, 						2, 3, LEVEL_UNSUPPORT,	LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_UNSUPPORT,	 LEVEL_ZERO,		LEVEL_ZERO,		 Service11Handle },
+ 	{ UDS_FALSE,	CLEARDIAGNOSTICINFORMATION,		4, 0, LEVEL_ZERO,		LEVEL_UNSUPPORT, LEVEL_ZERO, 	  LEVEL_ZERO,		 LEVEL_UNSUPPORT,	LEVEL_ZERO,		 Service14Handle },
+ 	{ UDS_FALSE,	READDTCINFORMATION, 			2, 7, LEVEL_ZERO,		LEVEL_UNSUPPORT, LEVEL_ZERO,	  LEVEL_ZERO,	 	 LEVEL_UNSUPPORT,	LEVEL_ZERO, 	 Service19Handle },
+ 	{ UDS_FALSE,	READDATABYIDENTIFIER, 			3, 0, LEVEL_ZERO,		LEVEL_ZERO, 	 LEVEL_ZERO,	  LEVEL_ZERO,	 	 LEVEL_ZERO,		LEVEL_ZERO, 	 Service22Handle },
+ 	{ UDS_FALSE,	READMEMORYBYADDRESS, 			4, 0, LEVEL_ONE,		LEVEL_UNSUPPORT, LEVEL_ONE,	 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service23Handle },
+ 	{ UDS_FALSE,	SECURITYACCESS, 				2, 4, LEVEL_UNSUPPORT,	LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service27Handle },
+ 	{ UDS_FALSE,	COMMUNICATIONCONTROL, 			3, 4, LEVEL_UNSUPPORT,	LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_UNSUPPORT,	 LEVEL_ZERO,		LEVEL_ZERO, 	 Service28Handle },
+ 	{ UDS_FALSE,	READDATABYPERIODICIDENTIFIER, 	2, 4, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, LEVEL_ONE,	 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2AHandle },
+ 	{ UDS_FALSE,	DYNAMICALLYDEFINEDATAIDENTIFIER,4, 3, LEVEL_UNSUPPORT,  LEVEL_UNSUPPORT, LEVEL_ZERO, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2CHandle },
+ 	{ UDS_FALSE,	WRITEDATABYIDENTIFIER,			4, 0, LEVEL_UNSUPPORT,  LEVEL_ONE, 		 LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2EHandle },
+ 	{ UDS_FALSE,	INPUTOUTPUTCONTROLBYIDENTIFIER, 4, 0, LEVEL_UNSUPPORT,  LEVEL_UNSUPPORT, LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service2FHandle },
+ 	{ UDS_FALSE,	ROUTINECONTROL, 				4, 3, LEVEL_UNSUPPORT,  LEVEL_ONE, 		 LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service31Handle }, 	
+	{ UDS_FALSE,	REQUESTDOWNLOAD, 				5, 0, LEVEL_UNSUPPORT,	LEVEL_ONE,		 LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service34Handle },
+	{ UDS_FALSE,	REQUESTUPLOAD, 					5, 0, LEVEL_UNSUPPORT,	LEVEL_ONE,		 LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service35Handle },
+	{ UDS_FALSE,	TRANSFERDATA, 					2, 0, LEVEL_UNSUPPORT,	LEVEL_ONE,		 LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service36Handle },
+	{ UDS_FALSE,	REQUESTTRANSFEREXIT, 			1, 0, LEVEL_UNSUPPORT,	LEVEL_ONE,		 LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service37Handle },
+	{ UDS_FALSE,	WRITEMEMORYBYADDRESS, 			5, 0, LEVEL_UNSUPPORT,  LEVEL_UNSUPPORT, LEVEL_ONE, 	  LEVEL_UNSUPPORT,	 LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT, Service3DHandle },
+ 	{ UDS_FALSE,	TESTERPRESENT, 					2, 1, LEVEL_ZERO,		LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO,		 Service3EHandle },
+ 	{ UDS_FALSE,	CONTROLDTCSETTING, 				2, 2, LEVEL_UNSUPPORT,	LEVEL_ZERO,		 LEVEL_ZERO,	  LEVEL_UNSUPPORT,	 LEVEL_ZERO,		LEVEL_ZERO,		 Service85Handle },
+ 	{ UDS_FALSE,	LINKCONTROL, 					2, 3, LEVEL_UNSUPPORT,	LEVEL_ONE,		 LEVEL_ONE,	  	  LEVEL_UNSUPPORT,	 LEVEL_ONE,			LEVEL_ONE,		 Service87Handle },
 };
 Subfunction_t Service10Table[] = {
 	{ DefaultSessionType, DefaultSession_01Proc },
@@ -421,64 +459,220 @@ static uds_int8_t UDS_A_interface_regist(UDS_Interface_In_t *intf)
 		return ret;
 	}
 
-	if(intf->Session.service_get){
-		UDS_A_service_get = intf->Session.service_get;
+	if(intf->Network.can_direct_send){
+		_UDS_A_send_frame_direct = intf->Network.can_direct_send;
 	}else{
+		_UDS_A_send_frame_direct = 0;
+		ret |= -1;
+	}
+	if(intf->Session.service_get){
+		_UDS_A_service_get = intf->Session.service_get;
+	}else{
+		_UDS_A_service_get = 0;
 		ret |= -1;
 	}
 	if(intf->Session.USData_request){
-		UDS_A_service_process_USData_request = intf->Session.USData_request;
+		_UDS_A_service_process_USData_request = intf->Session.USData_request;
 	}else{
+		_UDS_A_service_process_USData_request = 0;
 		ret |= -1;
 	}
 	if(intf->Session.ParaChange_request){
-		UDS_A_service_process_ParaChange_request = intf->Session.ParaChange_request;
+		_UDS_A_service_process_ParaChange_request = intf->Session.ParaChange_request;
 	}else{
+		_UDS_A_service_process_ParaChange_request = 0;
 		ret |= -1;
 	}
 	if(intf->Session.time_value_get){
-		UDS_A_timer_value_get = intf->Session.time_value_get;
+		_UDS_A_timer_value_get = intf->Session.time_value_get;
 	}else{
+		_UDS_A_timer_value_get = 0;
 		ret |= -1;
 	}
 	if(intf->Session.time_status_get){
-		UDS_A_timer_status_get = intf->Session.time_status_get;
+		_UDS_A_timer_status_get = intf->Session.time_status_get;
 	}else{
+		_UDS_A_timer_status_get = 0;
 		ret |= -1;
 	}
 	if(intf->Session.time_ctl_stop){
-		UDS_A_timer_ctl_stop = intf->Session.time_ctl_stop;
+		_UDS_A_timer_ctl_stop = intf->Session.time_ctl_stop;
 	}else{
+		_UDS_A_timer_ctl_stop = 0;
 		ret |= -1;
 	}
 	if(intf->Session.time_ctl_run){
-		UDS_A_timer_ctl_run = intf->Session.time_ctl_run;
+		_UDS_A_timer_ctl_run = intf->Session.time_ctl_run;
 	}else{
+		_UDS_A_timer_ctl_run = 0;
 		ret |= -1;
 	}
 	if(intf->Session.time_ctl_restart){
-		UDS_A_timer_ctl_restart = intf->Session.time_ctl_restart;
+		_UDS_A_timer_ctl_restart = intf->Session.time_ctl_restart;
 	}else{
+		_UDS_A_timer_ctl_restart = 0;
 		ret |= -1;
 	}
 	if(intf->Session.time_ctl_reset){
-		UDS_A_timer_ctl_reset = intf->Session.time_ctl_reset;
+		_UDS_A_timer_ctl_reset = intf->Session.time_ctl_reset;
 	}else{
+		_UDS_A_timer_ctl_reset = 0;
 		ret |= -1;
 	}
 	if(intf->Eeprom.read){
-		UDS_A_eeprom_read = intf->Eeprom.read;
+		_UDS_A_eeprom_read = intf->Eeprom.read;
 	}else{
+		_UDS_A_eeprom_read = 0;
 		ret |= -1;
 	}
 	if(intf->Eeprom.write){
-		UDS_A_eeprom_write = intf->Eeprom.write;
+		_UDS_A_eeprom_write = intf->Eeprom.write;
 	}else{
+		_UDS_A_eeprom_write = 0;
 		ret |= -1;
 	}
 
 	return ret;
 }
+//App get the lower layer service
+static uds_uint8_t UDS_A_service_get(UDS_N_Services_t *res,uds_uint8_t *buf)
+{
+	uds_int8_t ret = -1;
+
+	if(_UDS_A_service_get){
+		ret = _UDS_A_service_get(res,buf);
+	}
+
+	return ret;
+}
+//App layer issue a USData.request service
+static uds_int8_t UDS_A_service_process_USData_request(void *pdata)
+{
+	uds_int8_t ret = -1;
+
+	if(_UDS_A_service_process_USData_request){
+		ret = _UDS_A_service_process_USData_request(pdata);
+	}
+
+	return ret;
+}
+
+//App layer issue a ParaChange.request service
+static uds_int8_t UDS_A_service_process_ParaChange_request(void *pdata)
+{
+	uds_int8_t ret = -1;
+
+	if(_UDS_A_service_process_ParaChange_request){
+		ret = _UDS_A_service_process_ParaChange_request(pdata);
+	}
+
+	return ret;
+}
+
+//App get the session layer timer status
+static uds_int8_t UDS_A_timer_status_get(UDS_S_Time_Name_e time)
+{
+	uds_int8_t ret = -1;
+
+	if(_UDS_A_timer_status_get){
+		ret = _UDS_A_timer_status_get(time);
+	}
+
+	return ret;
+}
+
+static uds_int8_t UDS_A_timer_ctl_stop(UDS_S_Time_Name_e time)
+{
+	uds_int8_t ret = -1;
+
+	if(_UDS_A_timer_ctl_stop){
+		ret = _UDS_A_timer_ctl_stop(time);
+	}
+
+	return ret;
+}
+
+static uds_int8_t UDS_A_timer_ctl_run(UDS_S_Time_Name_e time)
+{
+	uds_int8_t ret = -1;
+
+	if(_UDS_A_timer_ctl_run){
+		ret = _UDS_A_timer_ctl_run(time);
+	}
+
+	return ret;
+}
+
+static uds_int8_t UDS_A_timer_ctl_restart(UDS_S_Time_Name_e time)
+{
+	uds_int8_t ret = -1;
+
+	if(_UDS_A_timer_ctl_restart){
+		ret = _UDS_A_timer_ctl_restart(time);
+	}
+
+	return ret;
+}
+
+static uds_int8_t UDS_A_timer_ctl_reset(UDS_S_Time_Name_e time)
+{
+	uds_int8_t ret = -1;
+
+	if(_UDS_A_timer_ctl_reset){
+		ret = _UDS_A_timer_ctl_reset(time);
+	}
+
+	return ret;
+}
+
+static uds_uint16_t UDS_A_timer_value_get(UDS_S_Time_Name_e time)
+{
+	uds_uint16_t ret = 0xFFFF;
+
+	if(_UDS_A_timer_value_get){
+		ret = _UDS_A_timer_value_get(time);
+	}
+
+	return ret;
+}
+
+
+//App eeprom
+static uds_int8_t UDS_A_eeprom_read(UDS_EE_Tag_e tag,uds_uint8_t *buf)
+{
+	uds_int8_t ret = -1;
+
+	if(_UDS_A_eeprom_read){
+		ret = _UDS_A_eeprom_read(tag,buf);
+	}
+
+	return ret;
+}
+
+static uds_int8_t UDS_A_eeprom_write(UDS_EE_Tag_e tag,uds_uint8_t *buf)
+{
+	uds_int8_t ret = -1;
+
+	if(_UDS_A_eeprom_write){
+		ret = _UDS_A_eeprom_write(tag,buf);
+	}
+
+	return ret;
+}
+
+
+//send frame directly
+static uds_int8_t UDS_A_send_frame_direct(uds_uint32_t id,uds_uint8_t length,uds_uint8_t *data)
+{
+	uds_int8_t ret = -1;
+
+	if(_UDS_A_send_frame_direct){
+		ret = _UDS_A_send_frame_direct(id,length,data);
+	}
+
+	return ret;
+}
+
 
 
 static UDS_A_Session_Time_Control_t *UDS_A_get_session_time_ctl(void)
@@ -917,8 +1111,8 @@ static void SecurityAccess_Init(void) {
 	}
 }
 
-static void DTCStatusAvailabilityMask_Init(uds_uint8_t DTCStatusAvailabilityMask) {
-	DTCStatusAvailabilityMask = DTCStatusAvailabilityMask;
+static void DTCStatusAvailabilityMask_Init(uds_uint8_t DTCAvailabilityMask) {
+	DTCStatusAvailabilityMask = DTCAvailabilityMask;
 }
 
 static void FaultOccurenceCounterRecordNumber_Init(uds_uint8_t RecordNumer) {
@@ -1057,14 +1251,14 @@ static void SessionSupportAndSecurityAccess_Init(uds_uint8_t support, uds_uint8_
 	uds_uint8_t i;
 	for (i = 0; i < NUMBEROFSERVICE; i++) {
 		if (DiagnosticServiceTable[i].ServiceID == service) {
-			DiagnosticServiceTable[i].FUNDefaultSession_Security = FUNDefaultSession_Security;
-			DiagnosticServiceTable[i].FUNExtendedSession_Security = FUNExtendedSession_Security;
-			DiagnosticServiceTable[i].FUNProgramSeesion_Security = FUNProgramSeesion_Security;
-			DiagnosticServiceTable[i].PHYDefaultSession_Security = PHYDefaultSession_Security;
-			DiagnosticServiceTable[i].PHYExtendedSession_Security = PHYExtendedSession_Security;
-			DiagnosticServiceTable[i].PHYProgramSeesion_Security = PHYProgramSeesion_Security;
-			DiagnosticServiceTable[i].NumOfSubfunc = Numofsubfunction;
 			DiagnosticServiceTable[i].Support = support;
+			DiagnosticServiceTable[i].NumOfSubfunc = Numofsubfunction;
+			DiagnosticServiceTable[i].PHYDefaultSession_Security = PHYDefaultSession_Security;
+			DiagnosticServiceTable[i].PHYProgramSeesion_Security = PHYProgramSeesion_Security;
+			DiagnosticServiceTable[i].PHYExtendedSession_Security = PHYExtendedSession_Security;
+			DiagnosticServiceTable[i].FUNDefaultSession_Security = FUNDefaultSession_Security;
+			DiagnosticServiceTable[i].FUNProgramSeesion_Security = FUNProgramSeesion_Security;
+			DiagnosticServiceTable[i].FUNExtendedSession_Security = FUNExtendedSession_Security;
 		}
 	}
 }
@@ -1091,11 +1285,11 @@ void UDS_A_Diagnostic_Init(void) {
 	SecurityAccess_Init();
 
 	/*诊断服务配置*/
-	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x10, 4, LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO, 	LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO);		 
-	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x11, 3, LEVEL_UNSUPPORT, LEVEL_ZERO,		LEVEL_ZERO, 	LEVEL_UNSUPPORT, LEVEL_ZERO,		LEVEL_ZERO);		 
-	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x14, 0, LEVEL_ZERO,		 LEVEL_UNSUPPORT,	LEVEL_ZERO,		LEVEL_ZERO,		 LEVEL_UNSUPPORT,	LEVEL_ZERO);	 
+	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x10, 4, LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO, 	LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO);
+	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x11, 3, LEVEL_UNSUPPORT, LEVEL_ZERO,		LEVEL_ZERO, 	LEVEL_UNSUPPORT, LEVEL_ZERO,		LEVEL_ZERO);
+	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x14, 0, LEVEL_ZERO,		 LEVEL_UNSUPPORT,	LEVEL_ZERO,		LEVEL_ZERO,		 LEVEL_UNSUPPORT,	LEVEL_ZERO);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x19, 7, LEVEL_ZERO,		 LEVEL_UNSUPPORT,	LEVEL_ZERO, 	LEVEL_ZERO,	 	 LEVEL_UNSUPPORT,	LEVEL_ZERO);
-	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x22, 0, LEVEL_ZERO,		 LEVEL_ZERO, 	 	LEVEL_ZERO, 	LEVEL_ZERO,	 	 LEVEL_ZERO,		LEVEL_ZERO); 
+	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x22, 0, LEVEL_ZERO,		 LEVEL_ZERO, 	 	LEVEL_ZERO, 	LEVEL_ZERO,	 	 LEVEL_ZERO,		LEVEL_ZERO);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x23, 0, LEVEL_ONE,		 LEVEL_UNSUPPORT,	LEVEL_ONE, 		LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x27, 4, LEVEL_UNSUPPORT, LEVEL_ZERO,		LEVEL_ZERO, 	LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x28, 4, LEVEL_UNSUPPORT, LEVEL_ZERO,		LEVEL_ZERO, 	LEVEL_UNSUPPORT, LEVEL_ZERO,		LEVEL_ZERO);
@@ -1104,6 +1298,10 @@ void UDS_A_Diagnostic_Init(void) {
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x2E, 0, LEVEL_UNSUPPORT, LEVEL_ONE,			LEVEL_ONE, 		LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x2F, 0, LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_ONE, 		LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x31, 3, LEVEL_UNSUPPORT, LEVEL_ONE,			LEVEL_ONE, 		LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
+	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x34, 0, LEVEL_UNSUPPORT, LEVEL_ONE,			LEVEL_UNSUPPORT,LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
+	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x35, 0, LEVEL_UNSUPPORT, LEVEL_ONE,			LEVEL_UNSUPPORT,LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
+	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x36, 0, LEVEL_UNSUPPORT, LEVEL_ONE,			LEVEL_UNSUPPORT,LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
+	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x37, 0, LEVEL_UNSUPPORT, LEVEL_ONE,			LEVEL_UNSUPPORT,LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x3D, 0, LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_ONE, 		LEVEL_UNSUPPORT, LEVEL_UNSUPPORT,	LEVEL_UNSUPPORT);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x3E, 1, LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO, 	LEVEL_ZERO,		 LEVEL_ZERO,		LEVEL_ZERO);
 	SessionSupportAndSecurityAccess_Init(UDS_TRUE, 0x85, 2, LEVEL_UNSUPPORT, LEVEL_ZERO,		LEVEL_ZERO,		LEVEL_UNSUPPORT, LEVEL_ZERO,		LEVEL_ZERO);
@@ -1139,14 +1337,14 @@ void UDS_A_Diagnostic_Init(void) {
 	AddDID_Init(0xB128, &ReadDIDArrayB128, 4, UDS_FALSE, ReadOnly, NO_TAG, UDS_FALSE);
 	
 	/*ReadDataByPeriodicIdentifier*/
-	AddDID_Init(0xF201, Switch_SendData_Table[Data_EngineRPM].DataArray, 2, UDS_FALSE, ReadOnly, NO_TAG, UDS_FALSE);
+	AddDID_Init(0xF202, Switch_SendData_Table[Data_EngineRPM].DataArray, 2, UDS_FALSE, ReadOnly, NO_TAG, UDS_FALSE);
 	AddDID_Init(0xF287, Switch_SendData_Table[Data_Voltage].DataArray, 2, UDS_FALSE, ReadOnly, NO_TAG, UDS_FALSE);
 	AddDID_Init(0xF2FF, &ReadDIDArrayB128, 3, UDS_FALSE, ReadOnly, NO_TAG, UDS_FALSE);
 
 	/*WriteDataByIdentifier*/
 	AddDID_Init(0xA376, &Test_RAM_2E, 1, UDS_FALSE, Write_RAM, NO_TAG, UDS_FALSE);
 	AddDID_Init(0xF190, VIN_Number, VIN_NUMBER_BYTES, UDS_FALSE, Write_EEPROM, VIN_NUMNER_TAG, UDS_TRUE); //VIN
-	AddDID_Init(0xB134, Test_Table, 5, UDS_FALSE, Write_EEPROM, VIN_NUMNER_TAG, UDS_FALSE);
+	//AddDID_Init(0xB134, Test_Table, 5, UDS_FALSE, Write_EEPROM, VIN_NUMNER_TAG, UDS_FALSE);
 
 	/*InputOutputControlByIdentifier-Test Data*/
 	AddDID_Init(INPUTOUTPUTCONTROL_DID0, Switch_SendData_Table[Data_EngineRPM_IO].DataArray, 2, UDS_FALSE, Write_RAM_IO, NO_TAG, UDS_FALSE); //控制单个参数
@@ -1219,10 +1417,10 @@ void UDS_A_Diagnostic_Proc(void) {
 		}
 
 		/*根据Indication反馈结果处理*/
-		if (OK == UDS_A_Indication_SDU.Result) {
+		if (OK == UDS_A_Indication_SDU.Result) {			
 			UDS_A_DiagnosticService(UDS_A_Indication_SDU.A_PCI);
 			if (ResponseDataLength > UDS_RECIVE_BUFFER_LENGTH) { //超出Server最大数据发送长度
-				NRC = ROOR_31;
+				NRC = RTL_14;
 			}
 			
 			if ((NRC != PR_00) || (ResponseDataLength > 0) || (1 == SuppressPosRspMsgIndicationBit)) { //fail-safe-非抑制正响应，响应长度为0
@@ -1273,6 +1471,7 @@ void UDS_A_Diagnostic_Proc(void) {
 }
 
 /*0x2A-读取周期DID处理*/
+//service 0x2A was also allowed as USDT (single frame only) in UDS 2005, now it is allowed on UUDT only.
 static void ReadDatabyPeriodicInentifier_Proc(void)	{
 	if ((ExtendSession == SystemState.SessionMode) && (LEVEL_ONE == SystemState.SecurityLevel)) {
 		if (UDS_TRUE == ConfirmPeridDIDSend) {
@@ -1314,7 +1513,7 @@ static void ReadDatabyPeriodicInentifier_Proc(void)	{
 				}
 			}
 			
-			if ((PeriodicDIDArray.NumofData > 0) && (DiagProcessInit == SystemState.DiagnosticProcessStatus)) {		
+			if (PeriodicDIDArray.NumofData > 0) {		
 				if (0 == DataBufferPutCycle) {
 					PeriodicDIDArray.FirstofDataIndex = PeriodicDIDArray.DataIndex[0];
 
@@ -1329,22 +1528,28 @@ static void ReadDatabyPeriodicInentifier_Proc(void)	{
 						else {
 							i++;
 						}
-					}				
-					TempPCI = UDS_A_Indication_SDU.A_PCI;
-					UDS_A_Indication_SDU.A_PCI = 0x2AU;
-					SDUSendBuffArray[1] = (uds_uint8_t)ReadDIDTable[PeriodicDIDArray.FirstofDataIndex].DataIdentifier;
-					ResponseDataLength = 2;
+					}
+					
+					SDUSendBuffArray_0X2A[0] = (uds_uint8_t)ReadDIDTable[PeriodicDIDArray.FirstofDataIndex].DataIdentifier;
+					ResponseDataLength_0x2A = 1;
 
 					/*将ReadDID数组中与选定PDID，DID相同的对应数据填充至发送数组，并将相应计数器重置*/
 					for (uds_uint8_t i = 0; i < NumberofReadDID; i++) {
 						if (ReadDIDTable[PeriodicDIDArray.FirstofDataIndex].DataIdentifier == ReadDIDTable[i].DataIdentifier) {
-							memcpy(SDUSendBuffArray + ResponseDataLength, ReadDIDTable[i].DataPointer, ReadDIDTable[i].DataLength);
-							ResponseDataLength += ReadDIDTable[i].DataLength;
+							if (Write_EEPROM == ReadDIDTable[i].DataIdentifierType) {
+								UDS_A_Data_Load(ReadDIDTable[i].DataIdentifierTag, SDUSendBuffArray_0X2A + ResponseDataLength_0x2A, ReadDIDTable[i].DataLength, DataLoad_DefaultValue);
+							}
+							else {
+								memcpy(SDUSendBuffArray_0X2A + ResponseDataLength_0x2A, ReadDIDTable[i].DataPointer, ReadDIDTable[i].DataLength);
+							}
+							ResponseDataLength_0x2A += ReadDIDTable[i].DataLength;
 							ReadDIDTable[i].TransmitCounter = ReadDIDTable[i].TransmitTime; //重置计数器
 						}
 					}
-					UDS_A_Response_Proc(PR_00, ResponseDataLength, UDS_FALSE, Physical);
-					UDS_A_Indication_SDU.A_PCI = TempPCI;
+					
+					/*此处调用CAN报文发送函数*/
+					UDS_A_send_frame_direct(PERIODICDID_SEND_ID, ResponseDataLength_0x2A, SDUSendBuffArray_0X2A);
+				
 					DataBufferPutCycle = DATAPUTCYCLE;
 				}
 				else {
@@ -1440,105 +1645,110 @@ static void UDS_A_DiagnosticService(uds_uint8_t DiagServiceID) {
 		}
 	}
 
-	/*寻址类型-会话模式-安全等级-服务处理*/
+	/*最小长度-寻址类型-会话模式-安全等级-服务处理*/
 	if (UDS_TRUE == ValidSid) {
-		if (Physical == UDS_A_Indication_SDU.TAType) {
-			if (DefaultSession == SystemState.SessionMode) {
-				if (DiagnosticServiceTable[ServiceIndex].PHYDefaultSession_Security == LEVEL_UNSUPPORT) {
-					NRC = SNSIAS_7F;
+		if (UDS_A_Indication_SDU.Length >= DiagnosticServiceTable[ServiceIndex].MinDataLength) {			
+			if (Physical == UDS_A_Indication_SDU.TAType) {
+				if (DefaultSession == SystemState.SessionMode) {
+					if (DiagnosticServiceTable[ServiceIndex].PHYDefaultSession_Security == LEVEL_UNSUPPORT) {
+						NRC = SNSIAS_7F;
+					}
+					else {
+						if ((DiagnosticServiceTable[ServiceIndex].PHYDefaultSession_Security & SystemState.SecurityLevel) == SystemState.SecurityLevel) {
+							DiagnosticServiceTable[ServiceIndex].ServiceHandle();
+						}
+						else {
+							NRC = SAD_33;
+						}
+					}
 				}
-				else {
-					if ((DiagnosticServiceTable[ServiceIndex].PHYDefaultSession_Security & SystemState.SecurityLevel) == SystemState.SecurityLevel) {
+				else if (ExtendSession == SystemState.SessionMode) {
+					if (DiagnosticServiceTable[ServiceIndex].PHYExtendedSession_Security == LEVEL_UNSUPPORT) {
+						NRC = SNSIAS_7F;
+					}
+					else {
+						if ((DiagnosticServiceTable[ServiceIndex].PHYExtendedSession_Security & SystemState.SecurityLevel) == SystemState.SecurityLevel) {
+							DiagnosticServiceTable[ServiceIndex].ServiceHandle();
+						}
+						else {
+							NRC = SAD_33;
+						}
+					}
+				}
+				else if (ProgramingSession == SystemState.SessionMode) {
+					if (DiagnosticServiceTable[ServiceIndex].PHYProgramSeesion_Security == LEVEL_UNSUPPORT) {
+						NRC = SNSIAS_7F;
+					}
+					else {
+						if ((DiagnosticServiceTable[ServiceIndex].PHYProgramSeesion_Security & SystemState.SecurityLevel) == SystemState.SecurityLevel) {
+							DiagnosticServiceTable[ServiceIndex].ServiceHandle();
+						}
+						else {
+							NRC = SAD_33;
+						}
+					}
+				}
+				else if (FactorySeesion == SystemState.SessionMode) {
+					if ((DIAGNOSTICSESSIONCONTROL == DiagnosticServiceTable[ServiceIndex].ServiceID)
+						|| (ECURESET == DiagnosticServiceTable[ServiceIndex].ServiceID)
+						|| (READDATABYIDENTIFIER == DiagnosticServiceTable[ServiceIndex].ServiceID)
+						|| (SECURITYACCESS == DiagnosticServiceTable[ServiceIndex].ServiceID)
+						|| (WRITEDATABYIDENTIFIER == DiagnosticServiceTable[ServiceIndex].ServiceID)
+						|| (TESTERPRESENT == DiagnosticServiceTable[ServiceIndex].ServiceID)) {
 						DiagnosticServiceTable[ServiceIndex].ServiceHandle();
 					}
 					else {
-						NRC = SAD_33;
+						NRC = SNSIAS_7F;
 					}
 				}
 			}
-			else if (ExtendSession == SystemState.SessionMode) {
-				if (DiagnosticServiceTable[ServiceIndex].PHYExtendedSession_Security == LEVEL_UNSUPPORT) {
-					NRC = SNSIAS_7F;
-				}
-				else {
-					if ((DiagnosticServiceTable[ServiceIndex].PHYExtendedSession_Security & SystemState.SecurityLevel) == SystemState.SecurityLevel) {
-						DiagnosticServiceTable[ServiceIndex].ServiceHandle();
+			else if (Functional == UDS_A_Indication_SDU.TAType) {
+				if (DefaultSession == SystemState.SessionMode) {
+					if (DiagnosticServiceTable[ServiceIndex].FUNDefaultSession_Security == LEVEL_UNSUPPORT) {
+						NRC = SNSIAS_7F;
 					}
 					else {
-						NRC = SAD_33;
+						if ((DiagnosticServiceTable[ServiceIndex].FUNDefaultSession_Security & SystemState.SecurityLevel) == SystemState.SecurityLevel) {
+							DiagnosticServiceTable[ServiceIndex].ServiceHandle();
+						}
+						else {
+							NRC = SAD_33;
+						}
 					}
 				}
-			}
-			else if (ProgramingSession == SystemState.SessionMode) {
-				if (DiagnosticServiceTable[ServiceIndex].PHYProgramSeesion_Security == LEVEL_UNSUPPORT) {
-					NRC = SNSIAS_7F;
-				}
-				else {
-					if ((DiagnosticServiceTable[ServiceIndex].PHYProgramSeesion_Security & SystemState.SecurityLevel) == SystemState.SecurityLevel) {
-						DiagnosticServiceTable[ServiceIndex].ServiceHandle();
+				else if (ExtendSession == SystemState.SessionMode) {
+					if (DiagnosticServiceTable[ServiceIndex].FUNExtendedSession_Security == LEVEL_UNSUPPORT) {
+						NRC = SNSIAS_7F;
 					}
 					else {
-						NRC = SAD_33;
+						if ((DiagnosticServiceTable[ServiceIndex].FUNExtendedSession_Security & SystemState.SecurityLevel) == SystemState.SecurityLevel) {
+							DiagnosticServiceTable[ServiceIndex].ServiceHandle();
+						}
+						else {
+							NRC = SAD_33;
+						}
 					}
 				}
-			}
-			else if (FactorySeesion == SystemState.SessionMode) {
-				if ((DIAGNOSTICSESSIONCONTROL == DiagnosticServiceTable[ServiceIndex].ServiceID)
-					|| (ECURESET == DiagnosticServiceTable[ServiceIndex].ServiceID)
-					|| (READDATABYIDENTIFIER == DiagnosticServiceTable[ServiceIndex].ServiceID)
-					|| (SECURITYACCESS == DiagnosticServiceTable[ServiceIndex].ServiceID)
-					|| (WRITEDATABYIDENTIFIER == DiagnosticServiceTable[ServiceIndex].ServiceID)
-					|| (TESTERPRESENT == DiagnosticServiceTable[ServiceIndex].ServiceID)) {
-					DiagnosticServiceTable[ServiceIndex].ServiceHandle();
+				else if (ProgramingSession == SystemState.SessionMode) {
+					if (DiagnosticServiceTable[ServiceIndex].FUNProgramSeesion_Security == LEVEL_UNSUPPORT) {
+						NRC = SNSIAS_7F;
+					}
+					else {
+						if ((DiagnosticServiceTable[ServiceIndex].FUNProgramSeesion_Security & SystemState.SecurityLevel) == SystemState.SecurityLevel) {
+							DiagnosticServiceTable[ServiceIndex].ServiceHandle();
+						}
+						else {
+							NRC = SAD_33;
+						}
+					}
 				}
-				else {
-					NRC = SNSIAS_7F;
+				else if (FactorySeesion == SystemState.SessionMode) {
+					NRC = SNS_11;
 				}
 			}
 		}
-		else if (Functional == UDS_A_Indication_SDU.TAType) {
-			if (DefaultSession == SystemState.SessionMode) {
-				if (DiagnosticServiceTable[ServiceIndex].PHYDefaultSession_Security == LEVEL_UNSUPPORT) {
-					NRC = SNSIAS_7F;
-				}
-				else {
-					if ((DiagnosticServiceTable[ServiceIndex].PHYDefaultSession_Security & SystemState.SecurityLevel) == SystemState.SecurityLevel) {
-						DiagnosticServiceTable[ServiceIndex].ServiceHandle();
-					}
-					else {
-						NRC = SAD_33;
-					}
-				}
-			}
-			else if (ExtendSession == SystemState.SessionMode) {
-				if (DiagnosticServiceTable[ServiceIndex].PHYExtendedSession_Security == LEVEL_UNSUPPORT) {
-					NRC = SNSIAS_7F;
-				}
-				else {
-					if ((DiagnosticServiceTable[ServiceIndex].PHYExtendedSession_Security & SystemState.SecurityLevel) == SystemState.SecurityLevel) {
-						DiagnosticServiceTable[ServiceIndex].ServiceHandle();
-					}
-					else {
-						NRC = SAD_33;
-					}
-				}
-			}
-			else if (ProgramingSession == SystemState.SessionMode) {
-				if (DiagnosticServiceTable[ServiceIndex].PHYProgramSeesion_Security == LEVEL_UNSUPPORT) {
-					NRC = SNSIAS_7F;
-				}
-				else {
-					if ((DiagnosticServiceTable[ServiceIndex].PHYProgramSeesion_Security & SystemState.SecurityLevel) == SystemState.SecurityLevel) {
-						DiagnosticServiceTable[ServiceIndex].ServiceHandle();
-					}
-					else {
-						NRC = SAD_33;
-					}
-				}
-			}
-			else if (FactorySeesion == SystemState.SessionMode) {
-				NRC = SNS_11;
-			}
+		else {
+			NRC = IMLOIF_13;
 		}
 	}
 	else {
@@ -1611,7 +1821,7 @@ static void UDS_A_Response_Proc(NegativeResposeCode NRC_Para, uds_uint16_t DataL
 	if ((PR_00 == NRC_Para) && (UDS_FALSE == SuppPosiFlag)) { //正响应&不抑制正响应
 		UDS_A_PositiveResponseDataUnit(DataLength);
 	}
-	else if ((NRC_Para != PR_00) && (!((Functional == TAtype) && ((SNS_11 == NRC_Para) || (SFNS_12 == NRC_Para) || (ROOR_31 == NRC_Para))))) { //负响应&非功能寻址下的特定NRC
+	else if ((NRC_Para != PR_00) && (!((Functional == TAtype) && ((SNS_11 == NRC_Para) || (SFNS_12 == NRC_Para) || (ROOR_31 == NRC_Para) || (SFNSIAS_7E == NRC_Para) || (SNSIAS_7F == NRC_Para))))) { //负响应&非功能寻址下的特定NRC
 		UDS_A_NegativeResponseDataUnit(NRC_Para);
 	}
 	else {
@@ -1680,6 +1890,13 @@ static void UDS_A_NegativeResponseDataUnit(uds_uint8_t nrc) {
 static void Service10Handle(void) {
 	uds_uint8_t SubIndex = 0;
 	uds_uint8_t ValidSub = UDS_FALSE;
+	
+	/*服务长度错误*/
+	if (UDS_A_Indication_SDU.Length != 2) {
+		NRC = IMLOIF_13;
+		return;
+	}
+
 	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
 	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
 
@@ -1707,11 +1924,6 @@ static void DefaultSession_01Proc(void) {
 	/*错误条件检查*/
 	{
 
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 2) {
-			NRC = IMLOIF_13;
-			return;
-		}
 	}
 
 	/*条件检查通过，服务处理*/
@@ -1748,15 +1960,9 @@ static void ProgramingSession_02Proc(void) {
 	/*错误条件检查*/
 	{
 
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 2) {
-			NRC = IMLOIF_13;
-			return;
-		}
-
-		/*不满足切换会话模式的条件*/
+		/*当前会话不支持*/
 		if (DefaultSession == SystemState.SessionMode) { //默认会话不能直接切换到编程会话
-			NRC = CNC_22;
+			NRC = SFNSIAS_7E;
 			return;
 		}
 	}
@@ -1785,15 +1991,9 @@ static void ExtendSession_03Proc(void) {
 	/*错误条件检查*/
 	{
 
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 2) {
-			NRC = IMLOIF_13;
-			return;
-		}
-
-		/*不满足切换会话模式的条件*/
+		/*当前会话不支持*/
 		if (ProgramingSession == SystemState.SessionMode) { //编程会话不能直接切换到扩展会话
-			NRC = CNC_22;
+			NRC = SFNSIAS_7E;
 			return;
 		}
 	}
@@ -1821,12 +2021,6 @@ static void FactorySeesion_04Proc(void) {
 
 	/*错误条件检查*/
 	{
-
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 2) {
-			NRC = IMLOIF_13;
-			return;
-		}
 
 		/*不满足切换会话模式的条件-待定*/
 		if (0) {
@@ -1857,6 +2051,13 @@ static void FactorySeesion_04Proc(void) {
 static void Service11Handle(void) {
 	uds_uint8_t SubIndex = 0;
 	uds_uint8_t ValidSub = UDS_FALSE;
+	
+	/*子服务长度错误*/
+	if (UDS_A_Indication_SDU.Length != 2) {
+		NRC = IMLOIF_13;
+		return;
+	}
+
 	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
 	ECUResetType = ServiceSubFunc;
 	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
@@ -1885,12 +2086,6 @@ static void HardReset_01Proc(void) {
 	/*错误条件检查*/
 	{
 
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 2) {
-			NRC = IMLOIF_13;
-			return;
-		}
-
 		/*复位条件不满足-待添加*/
 		if (0) {
 			NRC = CNC_22;
@@ -1917,12 +2112,6 @@ static void KeyOnOffReset_02Proc(void) {
 	/*错误条件检查*/
 	{
 
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 2) {
-			NRC = IMLOIF_13;
-			return;
-		}
-
 		/*复位条件不满足-待添加*/
 		if (0) {
 			NRC = CNC_22;
@@ -1948,12 +2137,6 @@ static void SoftReset_03Proc(void) {
 
 	/*错误条件检查*/
 	{
-
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 2) {
-			NRC = IMLOIF_13;
-			return;
-		}
 
 		/*复位条件不满足-待添加*/
 		if (0) {
@@ -1997,7 +2180,7 @@ static void Service14Handle(void) {
 	/*错误条件检查*/
 	{
 
-		/*子服务长度错误*/
+		/*服务长度错误*/
 		if (UDS_A_Indication_SDU.Length != 4) {
 			NRC = IMLOIF_13;
 			return;
@@ -2053,6 +2236,7 @@ static uds_uint8_t SearchDTCGroup_Func(uds_uint32_t DTCGroup) {
 static void Service19Handle(void) {
 	uds_uint8_t SubIndex = 0;
 	uds_uint8_t ValidSub = UDS_FALSE;
+	
 	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
 	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
 
@@ -2253,10 +2437,11 @@ static void ReportDTCSnapshotRecord_04Proc(void) {
 }
 
 static void DTC_Snapshot_Read_Func(uds_uint8_t SnapShotTag, DTCSnapshot_t TempDTCSnapshot) {
-	uds_uint8_t buffer[MAX_DTC_SNAPSHOT_STORE_BYTES];
-	
-	UDS_A_Data_Load(SnapShotTag, buffer, TempDTCSnapshot.DataLength, DataLoad_DefaultValue);
-	//UDS_A_eeprom_read(SnapShotTag, buffer);
+	uds_uint8_t length = 0, i, buffer[MAX_DTC_SNAPSHOT_STORE_BYTES];
+	for(i = 0 ; i < NumberofDTCSnapshot ; i++) {
+		length += DTCSnapshotTable[i].DataLength;
+	}
+	UDS_A_Data_Load(SnapShotTag, buffer, length, DataLoad_DefaultValue);
 	memcpy(SDUSendBuffArray + ResponseDataLength, buffer + TempDTCSnapshot.StartNum, TempDTCSnapshot.DataLength);
 	ResponseDataLength += TempDTCSnapshot.DataLength;
 }
@@ -2392,8 +2577,8 @@ static void Service22Handle(void) {
 	/*错误条件检查*/
 	{
 
-		/*子服务长度错误*/
-		if ((UDS_A_Indication_SDU.Length < 3) || (0 == (UDS_A_Indication_SDU.Length % 2))) {
+		/*服务长度错误*/
+		if (0 == (UDS_A_Indication_SDU.Length % 2)) {
 			NRC = IMLOIF_13;
 			return;
 		}
@@ -2419,23 +2604,35 @@ static void Service22Handle(void) {
 			memcpy(&SDUSendBuffArray[ResponseDataLength], &UDS_A_Indication_SDU.A_SDU[2 * i], 2);
 			ResponseDataLength += 2;
 			for (j = 0; j < NumberofReadDID; j++) {
-				if (DataIdentifier == ReadDIDTable[j].DataIdentifier) {	
+				if (DataIdentifier == ReadDIDTable[j].DataIdentifier) {
 					if (Write_EEPROM == ReadDIDTable[j].DataIdentifierType) {
 						UDS_A_Data_Load(ReadDIDTable[j].DataIdentifierTag, SDUSendBuffArray + ResponseDataLength, ReadDIDTable[j].DataLength, DataLoad_DefaultValue);
 						//UDS_A_eeprom_read(ReadDIDTable[j].DataIdentifierTag, SDUSendBuffArray + ResponseDataLength);
 					}
-					else {					
+					else {
 						memcpy((SDUSendBuffArray + ResponseDataLength), ReadDIDTable[j].DataPointer, ReadDIDTable[j].DataLength);
 					}
 					ResponseDataLength += ReadDIDTable[j].DataLength;
 					sts = UDS_TRUE;
 				}
 
-				if ((j == (NumberofReadDID - 1)) && (UDS_FALSE == sts)) { //请求ID有效性
-					NRC = ROOR_31;
-					break;
-				}
+				//if ((j == (NumberofReadDID - 1)) && (UDS_FALSE == sts)) { //请求ID有效性
+				//	NRC = ROOR_31;
+				//	break;
+				//}
 			}
+
+			if(UDS_FALSE == sts) {
+				ResponseDataLength -= 2;
+			}
+		}
+
+		/*协议要求，请求的所有DID不支持时，发送0X31*/
+		if (ResponseDataLength < 2) {
+			NRC = ROOR_31;
+		}
+		else if (ResponseDataLength > UDS_RECIVE_BUFFER_LENGTH) { //超出Server最大数据发送长度
+			NRC = RTL_14;
 		}
 	}
 }
@@ -2443,21 +2640,21 @@ static void Service22Handle(void) {
 /*23h-ReadMemoryByAddress服务*/
 static void Service23Handle(void) {
 	uds_uint8_t memorySizeBytes = (UDS_A_Indication_SDU.A_SDU[0] >> 4) & 0x0f, memoryAddressBytes = UDS_A_Indication_SDU.A_SDU[0] & 0x0f;
-	uds_uint32_t* memoryAddress;
+	uds_uint8_t* memoryAddress;
 	uds_uint32_t memorySize;
 
 	/*错误条件检查*/
 	{
 
-		/*子服务长度错误*/
-		if ((UDS_A_Indication_SDU.Length < 4) || (UDS_A_Indication_SDU.Length != (memorySizeBytes + memoryAddressBytes + 2)) || (memorySizeBytes > 4) || (memoryAddressBytes > 4)) {
-			NRC = IMLOIF_13;
+		/*addressAndLengthFormatIdentifier错误*/
+		if ((0 == memorySizeBytes) || (0 == memoryAddressBytes) || (memorySizeBytes > 4) || (memoryAddressBytes > 4)) { //(memorySizeBytes > 服务器支持的最大值)等
+			NRC = ROOR_31;
 			return;
 		}
 
-		/*子服务addressAndLengthFormatIdentifier错误*/
-		if ((0 == memorySizeBytes) || (0 == memoryAddressBytes)) { //(memorySizeBytes > 服务器支持的最大值)等
-			NRC = ROOR_31;
+		/*服务长度错误*/
+		if (UDS_A_Indication_SDU.Length != (memorySizeBytes + memoryAddressBytes + 2)) {
+			NRC = IMLOIF_13;
 			return;
 		}
 
@@ -2481,20 +2678,20 @@ static void Service23Handle(void) {
 }
 
 /*23h-读取内存地址接口函数*/
-static uds_uint32_t *ReadMemoryByAddress_Func(uds_uint8_t *Address, uds_uint16_t Length) {
-	uds_uint32_t *MemoryParameter = 0;
+static uds_uint8_t *ReadMemoryByAddress_Func(uds_uint8_t *Address, uds_uint16_t Length) {
+	uds_uint8_t *MemoryParameter = 0;
 	switch (Length) {
 	case 1:
-		MemoryParameter = (uds_uint32_t *)((uds_uint32_t)(*Address));
+		MemoryParameter = (uds_uint8_t *)((uds_uint32_t)(*Address));
 		break;
 	case 2:
-		MemoryParameter = (uds_uint32_t *)(((uds_uint32_t)(*Address) << 8) | (uds_uint32_t)(*(Address + 1)));
+		MemoryParameter = (uds_uint8_t *)(((uds_uint32_t)(*Address) << 8) | (uds_uint32_t)(*(Address + 1)));
 		break;
 	case 3:
-		MemoryParameter = (uds_uint32_t *)(((uds_uint32_t)(*Address) << 16) | ((uds_uint32_t)(*(Address + 1)) << 8) | (uds_uint32_t)(*(Address + 2)));
+		MemoryParameter = (uds_uint8_t *)(((uds_uint32_t)(*Address) << 16) | ((uds_uint32_t)(*(Address + 1)) << 8) | (uds_uint32_t)(*(Address + 2)));
 		break;
 	case 4:
-		MemoryParameter = (uds_uint32_t *)(((uds_uint32_t)(*Address) << 24) | ((uds_uint32_t)(*(Address + 1)) << 16) | ((uds_uint32_t)(*(Address + 2)) << 8) | (uds_uint32_t)(*(Address + 3)));
+		MemoryParameter = (uds_uint8_t *)(((uds_uint32_t)(*Address) << 24) | ((uds_uint32_t)(*(Address + 1)) << 16) | ((uds_uint32_t)(*(Address + 2)) << 8) | (uds_uint32_t)(*(Address + 3)));
 		break;
 	default:
 		break;
@@ -2528,6 +2725,7 @@ static uds_uint32_t ReadMemorySize_Func(uds_uint8_t *Address, uds_uint16_t Lengt
 static void Service27Handle(void) {
 	uds_uint8_t SubIndex = 0;
 	uds_uint8_t ValidSub = UDS_FALSE;
+	
 	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
 	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
 
@@ -2585,8 +2783,8 @@ static void SecurityAccessSeed_01Proc(void) {
 			Seed = 0;
 		}
 		else {
-			Seed = SeedCalc01_Func(SEED01); //计算Seed
-			SecurityAccessPara.Key = KeyCalc01_Func(SEED01); //计算Key
+			Seed = SeedCalc01_Func((uds_uint32_t)SEED01); //计算Seed
+			SecurityAccessPara.Key = KeyCalc01_Func(Seed); //计算Key
 			SecurityAccessPara.UnlockStep = WAIT_KEY;
 		}
 
@@ -2628,7 +2826,7 @@ static void SecurityAccessKey_02Proc(void) {
 		}
 
 		/*请求序列错误*/
-		if (WAIT_SEED_REQ == SecurityAccessPara.UnlockStep) {
+		if (SecurityAccessPara.UnlockStep != WAIT_KEY) {
 			NRC = RSE_24;
 			return;
 		}
@@ -2704,7 +2902,7 @@ static void SecurityAccessSeed_03Proc(void) {
 		}
 		else {
 			Seed = SeedCalc03_Func((uds_uint32_t)SEED03); //计算Seed
-			SecurityAccessPara.Key = KeyCalc03_Func((uds_uint32_t)SEED03); //计算Key
+			SecurityAccessPara.Key = KeyCalc03_Func(Seed); //计算Key
 			SecurityAccessPara.UnlockStep = WAIT_KEY;
 		}
 
@@ -2746,7 +2944,7 @@ static void SecurityAccessKey_04Proc(void) {
 		}
 
 		/*请求序列错误*/
-		if (WAIT_SEED_REQ == SecurityAccessPara.UnlockStep) {
+		if (SecurityAccessPara.UnlockStep != WAIT_KEY) {
 			NRC = RSE_24;
 			return;
 		}
@@ -2761,7 +2959,7 @@ static void SecurityAccessKey_04Proc(void) {
 			SystemState.SecurityLevel = LEVEL_TWO; //切换安全等级
 			SecurityAccessPara.UnlockStep = UNLOCKED; //解锁状态
 
-								   /*响应数组填充*/
+			/*响应数组填充*/
 			SDUSendBuffArray[1] = KEY04;
 			ResponseDataLength = 2;
 		}
@@ -2817,6 +3015,13 @@ static uds_uint32_t KeyCalc03_Func(uds_uint32_t RequestSeed) {
 static void Service28Handle(void) {
 	uds_uint8_t SubIndex = 0;
 	uds_uint8_t ValidSub = UDS_FALSE;
+
+	/*子服务长度错误*/
+	if (UDS_A_Indication_SDU.Length != 3) {
+		NRC = IMLOIF_13;
+		return;
+	}
+
 	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
 	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
 
@@ -2844,12 +3049,6 @@ static void EnableRxAndTx_00Proc(void) {
 
 	/*错误条件检查*/
 	{
-
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 3) {
-			NRC = IMLOIF_13;
-			return;
-		}
 
 		/*条件不满足-待添加(一般包括车辆静止，车速为0等)*/
 		if (0) {
@@ -2888,12 +3087,6 @@ static void EnableRxAndDisableTx_01Proc(void) {
 	/*错误条件检查*/
 	{
 
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 3) {
-			NRC = IMLOIF_13;
-			return;
-		}
-
 		/*条件不满足-待添加(一般包括车辆静止，车速为0等)*/
 		if (0) {
 			NRC = CNC_22;
@@ -2930,12 +3123,6 @@ static void DisableRxAndEnableTx_02Proc(void) {
 
 	/*错误条件检查*/
 	{
-
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 3) {
-			NRC = IMLOIF_13;
-			return;
-		}
 
 		/*条件不满足-待添加(一般包括车辆静止，车速为0等)*/
 		if (0) {
@@ -2975,12 +3162,6 @@ static void DisableRxAndTx_03Proc(void) {
 	/*错误条件检查*/
 	{
 
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 3) {
-			NRC = IMLOIF_13;
-			return;
-		}
-
 		/*条件不满足-待添加(一般包括车辆静止，车速为0等)*/
 		if (0) {
 			NRC = CNC_22;
@@ -3014,6 +3195,7 @@ static void DisableRxAndTx_03Proc(void) {
 static void Service2AHandle(void) {
 	uds_uint8_t SubIndex = 0;
 	uds_uint8_t ValidSub = UDS_FALSE;
+	
 	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
 	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
 
@@ -3031,7 +3213,7 @@ static void Service2AHandle(void) {
 		Service2ATable[SubIndex].SubServiceHandle();
 	}
 	else {
-		NRC = SFNS_12;
+		NRC = ROOR_31; //14229规范0X2A服务无SFNS_12响应码
 	}
 }
 
@@ -3082,13 +3264,14 @@ static void SendAtSlowRate_01Proc(void) {
 			}
 		}
 
-		if(DIDNumber != Tmp) {
+		if(0 == Tmp) {
 			NRC = ROOR_31;
 		}
 		else if ((NumofPeriodicDIDRunning + NewDIDCounter) > MAXNUMBEROFPERIODICDID) { //运行的周期DID+请求的周期DID>限定的最大周期DID数
 			NRC = ROOR_31;
 		}
 		else {
+			//for循环使用参数TmpIndex-对请求的有效PDID进行激活,周期重置;使用参数NewDIDCounter-对新增的有效PDID进行激活，周期重置，对已经激活的PDID不操作
 			for (i = 0; i < TmpIndex; i++) {
 				for (j = 0; j < NumberofReadDID; j++) {
 					if (ReadDIDTable[TempDIDTable[i]].DataIdentifier == ReadDIDTable[j].DataIdentifier) {
@@ -3097,7 +3280,7 @@ static void SendAtSlowRate_01Proc(void) {
 						ReadDIDTable[j].TransmitCounter = 0;
 					}
 				}
-			}
+			}			
 			NumofPeriodicDIDRunning += NewDIDCounter;
 			ResponseDataLength = 1;
 		}
@@ -3158,13 +3341,14 @@ static void SendAtMediumRate_02Proc(void) {
 			}
 		}
 
-		if(DIDNumber != Tmp) {
+		if(0 == Tmp) {
 			NRC = ROOR_31;
 		}
 		else if ((NumofPeriodicDIDRunning + NewDIDCounter) > MAXNUMBEROFPERIODICDID) { //运行的周期DID+请求的周期DID>限定的最大周期DID数
 			NRC = ROOR_31;
 		}
 		else {
+			//for循环使用参数TmpIndex-对请求的有效PDID进行激活,周期重置;使用参数NewDIDCounter-对新增的有效PDID进行激活，周期重置，对已经激活的PDID不操作
 			for (i = 0; i < TmpIndex; i++) {
 				for (j = 0; j < NumberofReadDID; j++) {
 					if (ReadDIDTable[TempDIDTable[i]].DataIdentifier == ReadDIDTable[j].DataIdentifier) {
@@ -3234,13 +3418,14 @@ static void SendAtFastRate_03Proc(void) {
 			}
 		}
 
-		if(DIDNumber != Tmp) {
+		if(0 == Tmp) {
 			NRC = ROOR_31;
 		}
 		else if ((NumofPeriodicDIDRunning + NewDIDCounter) > MAXNUMBEROFPERIODICDID) { //运行的周期DID+请求的周期DID>限定的最大周期DID数
 			NRC = ROOR_31;
 		}
 		else {
+			//for循环使用参数TmpIndex-对请求的有效PDID进行激活,周期重置;使用参数NewDIDCounter-对新增的有效PDID进行激活，周期重置，对已经激活的PDID不操作
 			for (i = 0; i < TmpIndex; i++) {
 				for (j = 0; j < NumberofReadDID; j++) {
 					if (ReadDIDTable[TempDIDTable[i]].DataIdentifier == ReadDIDTable[j].DataIdentifier) {
@@ -3320,10 +3505,11 @@ static void StopSending_04Proc(void) {
 				}
 			}
 
-			if(DIDNumber != Tmp) {
+			if(0 == Tmp) {
 				NRC = ROOR_31;
 			}
 			else {
+				//for循环使用参数TmpIndex-对请求的有效PDID进行停止,周期清零;使用参数NewDIDCounter-对新增的有效PDID进行停止,周期清零.对已经停止的PDID不操作
 				for (i = 0; i < TmpIndex; i++) {
 					for (j = 0; j < NumberofReadDID; j++) {
 						if (ReadDIDTable[TempDIDTable[i]].DataIdentifier == ReadDIDTable[j].DataIdentifier) {
@@ -3347,6 +3533,7 @@ static void StopSending_04Proc(void) {
 static void Service2CHandle(void) {
 	uds_uint8_t SubIndex = 0;
 	uds_uint8_t ValidSub = UDS_FALSE;
+	
 	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
 	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
 
@@ -3365,7 +3552,7 @@ static void Service2CHandle(void) {
 	}
 	else {
 		NRC = SFNS_12;
-	}
+	}	
 }
 
 static void DefineByIdentifier_01Proc(void) {
@@ -3475,7 +3662,7 @@ static void DefineByIdentifier_01Proc(void) {
 
 static void DefineByMemoryAddress_02Proc(void) {
 	uds_uint8_t memorySizeBytes = (UDS_A_Indication_SDU.A_SDU[3] >> 4) & 0x0f, memoryAddressBytes = UDS_A_Indication_SDU.A_SDU[3] & 0x0f;
-	uds_uint32_t* memoryAddress, memorySize;
+	uds_uint8_t* memoryAddress, memorySize;
 	uds_uint16_t dynamicallyDefinedDataIdentifier, dynamicalDIDLength = 0, length = 4, DefinedDynamicalDIDDataLength = 0;
 	uds_uint8_t Addressnum = 0, sts = NoDefine, Tmp = 0, ConfigPDIDnum;
 	ReadDatabyInentifier_t LastPDID;
@@ -3483,22 +3670,22 @@ static void DefineByMemoryAddress_02Proc(void) {
 	/*错误条件检查*/
 	{
 
-		/*安全等级检查*/
-		if (SystemState.SecurityLevel != LEVEL_ONE) {
-			NRC = SAD_33;
-			return;
-		}
-
 		/*子服务长度错误*/
-		if ((UDS_A_Indication_SDU.Length < 7) || ((UDS_A_Indication_SDU.Length - 5) % 2 != 0) || (memorySizeBytes > 4) || (memoryAddressBytes > 4)) {
+		if ((UDS_A_Indication_SDU.Length < 7) || ((UDS_A_Indication_SDU.Length - 5) % 2 != 0)) {
 			NRC = IMLOIF_13;
 			return;
 		}
 
 		/*DID分配错误、addressAndLengthFormatIdentifier错误*/
 		if ((UDS_A_Indication_SDU.A_SDU[1] != 0xf2) && (UDS_A_Indication_SDU.A_SDU[1] != 0xf3)
-			|| (0 == memorySizeBytes) || (0 == memoryAddressBytes)) { //(memorySizeBytes > 服务器支持的最大值)，地址有效性检查等待添加
+			|| (0 == memorySizeBytes) || (0 == memoryAddressBytes) || (memorySizeBytes > 4) || (memoryAddressBytes > 4)) { //(memorySizeBytes > 服务器支持的最大值)，地址有效性检查等待添加
 			NRC = ROOR_31;
+			return;
+		}
+
+		/*安全等级检查*/
+		if (SystemState.SecurityLevel != LEVEL_ONE) {
+			NRC = SAD_33;
 			return;
 		}
 
@@ -3687,16 +3874,16 @@ static void Service2EHandle(void) {
 
 	/*错误条件检查*/
 	{
-
-		/*子服务长度错误*/
-		if ((UDS_A_Indication_SDU.Length < 4) || (UDS_A_Indication_SDU.Length != (TempDID->DataLength + 3))) {
-			NRC = IMLOIF_13;
-			return;
-		}
-
+	
 		/*请求的DID不支持*/
 		if (UDS_A_NULL == TempDID) {
 			NRC = ROOR_31;
+			return;
+		}
+
+		/*服务长度错误*/
+		if (UDS_A_Indication_SDU.Length != (TempDID->DataLength + 3)) {
+			NRC = IMLOIF_13;
 			return;
 		}
 
@@ -3720,11 +3907,16 @@ static void Service2EHandle(void) {
 		else if (Write_EEPROM == TempDID->DataIdentifierType){
 			if (UDS_TRUE == TempDID->FactoryConfigSupport) { //下线配置
 				if (FactorySeesion == SystemState.SessionMode) { //出厂会话才可写入
-					//UDS_A_eeprom_write(TempDID->DataIdentifierTag, UDS_A_Indication_SDU.A_SDU + 2);
-					UDS_A_Data_Save(TempDID->DataIdentifierTag, UDS_A_Indication_SDU.A_SDU + 2, TempDID->DataLength);
-
-					//test code
-					//memcpy(TempDID->DataPointer, UDS_A_Indication_SDU.A_SDU + 2, TempDID->DataLength);
+					if (LEVEL_ONE == SystemState.SecurityLevel) {
+						//UDS_A_eeprom_write(TempDID->DataIdentifierTag, UDS_A_Indication_SDU.A_SDU + 2);
+						UDS_A_Data_Save(TempDID->DataIdentifierTag, UDS_A_Indication_SDU.A_SDU + 2, TempDID->DataLength);
+						
+						//test code
+						//memcpy(TempDID->DataPointer, UDS_A_Indication_SDU.A_SDU + 2, TempDID->DataLength);
+					}
+					else {
+						NRC = SAD_33;
+					}
 				}
 				else {
 					NRC = ROOR_31;
@@ -3781,12 +3973,6 @@ static void Service2FHandle(void) {
 
 	/*错误条件检查*/
 	{
-
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length < 4) {
-			NRC = IMLOIF_13;
-			return;
-		}
 
 		/*请求的DID不支持-请求的InputOutputControlParameter不支持*/
 		if ((UDS_A_NULL == TempDID) || (UDS_A_Indication_SDU.A_SDU[2] > shortTermAdjustment)) {
@@ -3949,27 +4135,28 @@ static void IO_ControlParameter_Test(void) {
 		EngineRPM = IO_ControlPara.EngineRPM;
 	}
 	else {
-		EngineRPM = 2000;
+		EngineRPM = ENGINERPM_TEST;
 	}
 	
 	if (UDS_TRUE == IO_ControlPara_Flag_u.Flag_t.VehicleSpeed_Flag) {
 		VehicleSpeed = IO_ControlPara.VehicleSpeed;
 	}
 	else {
-		VehicleSpeed = 80;
+		VehicleSpeed = VEHICLESPEED_TEST;
 	}
 
 	if (UDS_TRUE == IO_ControlPara_Flag_u.Flag_t.Voltage_Flag) {
 		Voltage = IO_ControlPara.Voltage;
 	}
 	else {
-		Voltage = 1350;
+		Voltage = VOLTAGE_TEST;
 	}
 }
 
 static void Service31Handle(void) {
 	uds_uint8_t SubIndex = 0;
 	uds_uint8_t ValidSub = UDS_FALSE;
+	
 	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
 	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
 
@@ -4008,7 +4195,7 @@ static void StartRoutine_01Proc(void) {
 	{
 
 		/*子服务长度错误*/
-		if ((UDS_A_Indication_SDU.Length < 4) || (UDS_A_Indication_SDU.Length != (4 + TempRoutineID->RoutineControlOptionRecordDataLength))) {
+		if (UDS_A_Indication_SDU.Length != (4 + TempRoutineID->RoutineControlOptionRecordDataLength)) {
 			NRC = IMLOIF_13;
 			return;
 		}
@@ -4056,7 +4243,7 @@ static void StopRoutine_02Proc(void) {
 	{
 
 		/*子服务长度错误*/
-		if ((UDS_A_Indication_SDU.Length < 4) || (UDS_A_Indication_SDU.Length != (4 + TempRoutineID->RoutineControlOptionRecordDataLength))) {
+		if (UDS_A_Indication_SDU.Length != (4 + TempRoutineID->RoutineControlOptionRecordDataLength)) {
 			NRC = IMLOIF_13;
 			return;
 		}
@@ -4250,24 +4437,317 @@ static RoutineProcessStatus_e RoutineRun_03Func(RoutineControlType_e RoutineCont
 	}
 }
 
-/*3Dh-根据地址写内存服务*/
-static void Service3DHandle(void) {
-	uds_uint8_t memorySizeBytes = (UDS_A_Indication_SDU.A_SDU[0] >> 4) & 0x0f, memoryAddressBytes = UDS_A_Indication_SDU.A_SDU[0] & 0x0f;
-	uds_uint32_t* memoryAddress;
+static void Service34Handle(void) {
+	uds_uint8_t DataFormatIdentifier = UDS_A_Indication_SDU.A_SDU[0]; //高半字节表示压缩方法，低半字节表示加密方法
+	uds_uint8_t memorySizeBytes = (UDS_A_Indication_SDU.A_SDU[1] >> 4) & 0x0f, memoryAddressBytes = UDS_A_Indication_SDU.A_SDU[1] & 0x0f;
+	uds_uint8_t* memoryAddress;
 	uds_uint32_t memorySize;
 
 	/*错误条件检查*/
 	{
+	
+		/*addressAndLengthFormatIdentifier错误*/
+		if ((0 == memorySizeBytes) || (0 == memoryAddressBytes) || (memorySizeBytes > 4) || (memoryAddressBytes > 4)) { //(memorySizeBytes > 服务器支持的最大值)等
+			NRC = ROOR_31;
+			return;
+		}
 
-		/*子服务长度错误*/
-		if ((UDS_A_Indication_SDU.Length < 5) || (UDS_A_Indication_SDU.Length <= (memorySizeBytes + memoryAddressBytes + 2)) || (memorySizeBytes > 4) || (memoryAddressBytes > 4)) {
+		/*服务长度错误*/
+		if (UDS_A_Indication_SDU.Length < (memorySizeBytes + memoryAddressBytes + 3)) {
 			NRC = IMLOIF_13;
 			return;
 		}
 
-		/*子服务addressAndLengthFormatIdentifier错误*/
-		if ((0 == memorySizeBytes) || (0 == memoryAddressBytes)) { //(memorySizeBytes > 服务器支持的最大值)等
+		/*操作条件不满足-待添加*/
+		if (0) {
+			NRC = CNC_22;
+			return;
+		}
+		
+		/*上传下载未接收-待添加*/
+		if (0) {
+			NRC = UDNA_70;
+			return;
+		}
+	}
+	
+	/*条件检查通过，服务处理*/
+	{
+		memoryAddress = ReadMemoryByAddress_Func(UDS_A_Indication_SDU.A_SDU + 2, memoryAddressBytes);
+
+		for (uds_uint8_t i = 0; i < memoryAddressBytes; i++) {
+			UDS_PRINTF("memoryAddress%d = %#x\n", i, UDS_A_Indication_SDU.A_SDU[i + 2]);
+		}
+		
+		memorySize = ReadMemorySize_Func((UDS_A_Indication_SDU.A_SDU + memoryAddressBytes + 2), memorySizeBytes);
+		
+		/*此处需要添加Tester请求地址与Server本地地址的映射关系，地址有效性检查，地址操作权限检查等*/
+
+		DataTransfer.DownloadUploadStep = Transfer_Wait_Download;
+		DataTransfer.DataFormatIdentifier = DataFormatIdentifier;
+		DataTransfer.DataBlockSequenceCounter = 0; //数据发送块序号第一次从1开始计数
+		DataTransfer.DataDownloadLength = 0; //下载数据长度置0
+		DataTransfer.memoryAddress = memoryAddress;
+		DataTransfer.memorySize = memorySize;
+
+		/*响应数组填充*/
+		SDUSendBuffArray[1] = 0x20; //maxNumberOfBlockLength占据2个字节,低半字节恒为0
+		SDUSendBuffArray[2] = (uds_uint8_t)(MAXDATALENGTH >> 8);
+		SDUSendBuffArray[3] = (uds_uint8_t)MAXDATALENGTH;
+		ResponseDataLength = 4;
+	}
+}
+
+static void Service35Handle(void) {
+	uds_uint8_t DataFormatIdentifier = UDS_A_Indication_SDU.A_SDU[0]; //高半字节表示压缩方法，低半字节表示加密方法
+	uds_uint8_t memorySizeBytes = (UDS_A_Indication_SDU.A_SDU[1] >> 4) & 0x0f, memoryAddressBytes = UDS_A_Indication_SDU.A_SDU[1] & 0x0f;
+	uds_uint8_t* memoryAddress;
+	uds_uint32_t memorySize;
+
+	/*错误条件检查*/
+	{
+	
+		/*addressAndLengthFormatIdentifier错误*/
+		if ((0 == memorySizeBytes) || (0 == memoryAddressBytes) || (memorySizeBytes > 4) || (memoryAddressBytes > 4)) { //(memorySizeBytes > 服务器支持的最大值)等
 			NRC = ROOR_31;
+			return;
+		}
+
+		/*服务长度错误*/
+		if (UDS_A_Indication_SDU.Length < (memorySizeBytes + memoryAddressBytes + 3)) {
+			NRC = IMLOIF_13;
+			return;
+		}
+
+		/*操作条件不满足-待添加*/
+		if (0) {
+			NRC = CNC_22;
+			return;
+		}
+		
+		/*上传下载未接收-待添加*/
+		if (0) {
+			NRC = UDNA_70;
+			return;
+		}
+	}
+	
+	/*条件检查通过，服务处理*/
+	{
+		memoryAddress = ReadMemoryByAddress_Func(UDS_A_Indication_SDU.A_SDU + 2, memoryAddressBytes);
+		memorySize = ReadMemorySize_Func((UDS_A_Indication_SDU.A_SDU + memoryAddressBytes + 2), memorySizeBytes);
+
+		UDS_PRINTF("memoryAddress = %#x\n", memoryAddress);
+		UDS_PRINTF("memorySize = %d\n", memorySize);
+		
+		/*此处需要添加Tester请求地址与Server本地地址的映射关系，地址有效性检查，地址操作权限检查等*/
+		
+		DataTransfer.DownloadUploadStep = Transfer_Wait_Upload;
+		DataTransfer.DataFormatIdentifier = DataFormatIdentifier;
+		DataTransfer.DataBlockSequenceCounter = 0; //数据发送块序号第一次从1开始计数
+		DataTransfer.DataUploadTimes = memorySize / (MAXDATALENGTH - 2) + (0 == (memorySize % (MAXDATALENGTH -2)) ? 0 : 1); //数据需上传的总次数
+		DataTransfer.DataUploadCounter = 0; //数据上传次数计数器清零
+		DataTransfer.memoryAddress = memoryAddress;
+		DataTransfer.memorySize = memorySize;
+
+		/*响应数组填充*/
+		SDUSendBuffArray[1] = 0x20; //maxNumberOfBlockLength占据2个字节,低半字节恒为0
+		SDUSendBuffArray[2] = (uds_uint8_t)(MAXDATALENGTH >> 8);
+		SDUSendBuffArray[3] = (uds_uint8_t)MAXDATALENGTH;
+		ResponseDataLength = 4;
+	}
+}
+
+//写内存接口函数
+static uds_uint8_t ProgramWriteData(uds_uint8_t* address, uds_uint8_t* data, uds_uint16_t length) {
+
+	//编程ok返回ture,否则返回false
+	if(1) {
+		return UDS_TRUE;
+	}
+	else {
+		return UDS_FALSE;
+	}
+}
+
+static void Service36Handle(void) {
+	uds_uint8_t blockSequenceCounter = UDS_A_Indication_SDU.A_SDU[0];
+	uds_uint8_t transferRequestParameterRecord[MAXDATALENGTH];
+
+	/*错误条件检查*/
+	{
+
+		/*服务长度错误*/
+		if (((Transfer_Wait_Download == DataTransfer.DownloadUploadStep) && (UDS_A_Indication_SDU.Length < 3)) //下载服务，长度小于3
+			|| ((Transfer_Wait_Upload == DataTransfer.DownloadUploadStep) && (UDS_A_Indication_SDU.Length != 2))){ //上传服务，长度不等于3
+			NRC = IMLOIF_13;
+			return;
+		}
+	
+		/*服务请求序列错误-数据传输进程不是等待发送也不是等待上传*/
+		if ((DataTransfer.DownloadUploadStep != Transfer_Wait_Download) 
+			&& (DataTransfer.DownloadUploadStep != Transfer_Wait_Upload)) {
+			NRC = RSE_24;
+			return;
+		}
+
+		/*wrongBlockSequenceCounter-块序号不等于上次传输的块序号和上次传输的块序号加1*/
+		if (((DataTransfer.DataBlockSequenceCounter & 0xff) != blockSequenceCounter) 
+			&& (((DataTransfer.DataBlockSequenceCounter + 1) & 0xff) != blockSequenceCounter))	{
+			NRC = WBSC_73;
+			return;
+		}
+
+		/*wrongBlockSequenceCounter-第一次传输块序号为1*/
+		if ((blockSequenceCounter != 1) 
+			&& (((Transfer_Wait_Download == DataTransfer.DownloadUploadStep) && (0 == DataTransfer.DataDownloadLength))
+				|| ((Transfer_Wait_Upload == DataTransfer.DownloadUploadStep) && (0 == DataTransfer.DataUploadCounter)))) {
+			NRC = WBSC_73;
+			return;
+		}
+
+		/*transferDataSuspended-块序号不等于上次传输的块序号时，下载数据长度超过memorySize*/
+		if ((DataTransfer.DataBlockSequenceCounter != blockSequenceCounter) 
+			&& (DataTransfer.DataDownloadLength + UDS_A_Indication_SDU.Length - 2) > DataTransfer.memorySize) {
+			NRC = TDS_71;
+			return;
+		}
+
+		/*操作条件不满足-待添加*/
+		if (0) {
+			NRC = CNC_22;
+			return;
+		}
+		
+		/*requestOutOfRange-待添加*/
+		if (0) {
+			NRC = ROOR_31;
+			return;
+		}
+
+		/*一般编程错误-待添加*/
+		if (0) {
+			NRC = GPF_72;
+			return;
+		}
+
+		/*电压过高过低-待添加*/
+		if (0) {
+			NRC = VTH_92;
+			return;
+		}
+		else if (0) {
+			NRC = VTL_93;
+			return;
+		}
+	}
+	
+	/*条件检查通过，服务处理*/
+	{
+		if (Transfer_Wait_Download == DataTransfer.DownloadUploadStep) { //download
+			if (DataTransfer.DataBlockSequenceCounter == blockSequenceCounter) { //blockSequenceCounter equal to the previous one
+				//send the positive response without writing the data once again
+			}
+			else {
+				if (UDS_TRUE == ProgramWriteData(DataTransfer.memoryAddress + DataTransfer.DataDownloadLength, UDS_A_Indication_SDU.A_SDU + 1, UDS_A_Indication_SDU.Length - 2)) { //写数据
+					DataTransfer.DataDownloadLength += UDS_A_Indication_SDU.Length - 2; //去除SID和块序号，获得有效download数据长度
+					DataTransfer.DataBlockSequenceCounter = blockSequenceCounter; //更新块序号
+				}
+				else {
+					NRC = GPF_72;
+					DataTransfer.DataBlockSequenceCounter = 0; //optional
+				}
+			}
+
+			if (PR_00 == NRC) {
+				SDUSendBuffArray[1] = blockSequenceCounter;
+				ResponseDataLength = 2;
+			}
+		}
+		else if (Transfer_Wait_Upload == DataTransfer.DownloadUploadStep) { //upload		
+			SDUSendBuffArray[1] = blockSequenceCounter;
+			if (DataTransfer.DataBlockSequenceCounter == blockSequenceCounter) { //blockSequenceCounter equal to the previous one
+				DataTransfer.DataUploadCounter--;
+			}
+
+			if (DataTransfer.DataUploadCounter < (DataTransfer.DataUploadTimes - 1)) { //非最后一次数据传输
+				memcpy(SDUSendBuffArray + 2, DataTransfer.memoryAddress + DataTransfer.DataUploadCounter * (MAXDATALENGTH - 2), (MAXDATALENGTH - 2));
+				ResponseDataLength = MAXDATALENGTH; //每次传输字节数为maxNumberOfBlockLength
+			
+				DataTransfer.DataUploadCounter++;
+				DataTransfer.DataBlockSequenceCounter = blockSequenceCounter; //更新块序号
+			}
+			else if (DataTransfer.DataUploadCounter == (DataTransfer.DataUploadTimes - 1)) { //最后一次数据传输
+				memcpy(SDUSendBuffArray + 2, DataTransfer.memoryAddress  + DataTransfer.DataUploadCounter * (MAXDATALENGTH - 2), DataTransfer.memorySize - DataTransfer.DataUploadCounter * (MAXDATALENGTH -2));
+				ResponseDataLength = DataTransfer.memorySize - DataTransfer.DataUploadCounter * (MAXDATALENGTH -2) + 2; //剩余字节
+			
+				DataTransfer.DataUploadCounter++;
+				DataTransfer.DataBlockSequenceCounter = blockSequenceCounter; //更新块序号
+			}
+			else {
+				NRC = TDS_71;
+			}
+			
+			UDS_PRINTF("DataUploadCounter = %#x\n", DataTransfer.DataUploadCounter);
+		}
+		else {
+			NRC = RSE_24; //fail-safe
+		}
+	}
+}
+
+static void Service37Handle(void) {
+
+	if (((Transfer_Wait_Download == DataTransfer.DownloadUploadStep) && (DataTransfer.DataDownloadLength == DataTransfer.memorySize))  //传输的数据长度等于Download请求长度，download complete
+		|| ((Transfer_Wait_Upload == DataTransfer.DownloadUploadStep) && (DataTransfer.DataUploadCounter == DataTransfer.DataUploadTimes))) {
+		DataTransfer.DownloadUploadStep = Transfer_Complete;
+	}
+	
+	UDS_PRINTF("memoryAddress = %#x\n", DataTransfer.memoryAddress);
+	UDS_PRINTF("memorySize = %d\n", DataTransfer.memorySize);
+	UDS_PRINTF("DataDownloadLength = %d\n", DataTransfer.DataDownloadLength);
+	UDS_PRINTF("DownloadUploadStep = %#x\n", DataTransfer.DownloadUploadStep);
+
+	UDS_PRINTF("DataUploadCounter = %#x\n", DataTransfer.DataUploadCounter);
+	UDS_PRINTF("DataUploadTimes = %#x\n", DataTransfer.DataUploadTimes);
+
+	/*错误条件检查*/
+	{
+
+		/*服务长度错误*/
+		if (UDS_A_Indication_SDU.Length != 1) {
+			NRC = IMLOIF_13;
+			return;
+		}
+
+		/*服务请求序列错误-块序号不等于上次传输的块序号时，数据传输进程不是等待发送也不是等待上传*/
+		if (DataTransfer.DownloadUploadStep != Transfer_Complete) {
+			NRC = RSE_24;
+			return;
+		}
+	}
+
+	ResponseDataLength = 1;
+}
+
+/*3Dh-根据地址写内存服务*/
+static void Service3DHandle(void) {
+	uds_uint8_t memorySizeBytes = (UDS_A_Indication_SDU.A_SDU[0] >> 4) & 0x0f, memoryAddressBytes = UDS_A_Indication_SDU.A_SDU[0] & 0x0f;
+	uds_uint8_t* memoryAddress;
+	uds_uint32_t memorySize;
+
+	/*错误条件检查*/
+	{
+	
+		/*addressAndLengthFormatIdentifier错误*/
+		if ((0 == memorySizeBytes) || (0 == memoryAddressBytes) || (memorySizeBytes > 4) || (memoryAddressBytes > 4)) { //(memorySizeBytes > 服务器支持的最大值)等
+			NRC = ROOR_31;
+			return;
+		}
+
+		/*服务长度错误*/
+		if (UDS_A_Indication_SDU.Length <= (memorySizeBytes + memoryAddressBytes + 2)) {
+			NRC = IMLOIF_13;
 			return;
 		}
 
@@ -4287,10 +4767,10 @@ static void Service3DHandle(void) {
 	/*条件检查通过，服务处理*/
 	{
 		memoryAddress = ReadMemoryByAddress_Func(UDS_A_Indication_SDU.A_SDU + 1, memoryAddressBytes);
+		memorySize = ReadMemorySize_Func((UDS_A_Indication_SDU.A_SDU + memoryAddressBytes + 1), memorySizeBytes);
 		
 		/*此处需要添加Tester请求地址与Server本地地址的映射关系，地址有效性检查，地址操作权限检查等*/
 		
-		memorySize = ReadMemorySize_Func((UDS_A_Indication_SDU.A_SDU + memoryAddressBytes + 1), memorySizeBytes);
 		if (UDS_A_Indication_SDU.Length == (2 + memorySizeBytes + memoryAddressBytes + memorySize)) {			
 			memcpy(memoryAddress, (UDS_A_Indication_SDU.A_SDU + memorySizeBytes + memoryAddressBytes + 1), memorySize);
 			memcpy(SDUSendBuffArray + 1, UDS_A_Indication_SDU.A_SDU, memorySizeBytes + memoryAddressBytes + 1);
@@ -4306,6 +4786,13 @@ static void Service3DHandle(void) {
 static void Service3EHandle(void) {
 	uds_uint8_t SubIndex = 0;
 	uds_uint8_t ValidSub = UDS_FALSE;
+
+	/*子服务长度错误*/
+	if (UDS_A_Indication_SDU.Length != 2) {
+		NRC = IMLOIF_13;
+		return;
+	}
+	
 	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
 	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
 
@@ -4324,7 +4811,7 @@ static void Service3EHandle(void) {
 	}
 	else {
 		NRC = SFNS_12;
-	}
+	}	
 }
 
 /*3Eh-会话保持无抑制正响应00h子服务*/
@@ -4332,12 +4819,6 @@ static void TesterPresent_00Proc(void) {
 
 	/*错误条件检查*/
 	{
-
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 2) {
-			NRC = IMLOIF_13;
-			return;
-		}
 
 		/*条件不满足-待添加*/
 		if (0) {
@@ -4359,6 +4840,13 @@ static void TesterPresent_00Proc(void) {
 static void Service85Handle(void) {
 	uds_uint8_t SubIndex = 0;
 	uds_uint8_t ValidSub = UDS_FALSE;
+
+	/*子服务长度错误*/
+	if (UDS_A_Indication_SDU.Length != 2) {
+		NRC = IMLOIF_13;
+		return;
+	}
+	
 	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
 	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
 
@@ -4377,7 +4865,7 @@ static void Service85Handle(void) {
 	}
 	else {
 		NRC = SFNS_12;
-	}
+	}	
 }
 
 /*85h-DTC设置On子服务*/
@@ -4386,11 +4874,6 @@ static void DTCSettingOn_01Proc(void) {
 	/*错误条件检查*/
 	{
 
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 2) {
-			NRC = IMLOIF_13;
-			return;
-		}
 	}
 
 	/*条件检查通过，服务处理*/
@@ -4413,11 +4896,6 @@ static void DTCSettingOff_02Proc(void) {
 	/*错误条件检查*/
 	{
 
-		/*子服务长度错误*/
-		if (UDS_A_Indication_SDU.Length != 2) {
-			NRC = IMLOIF_13;
-			return;
-		}
 	}
 
 	/*条件检查通过，服务处理*/
@@ -4437,6 +4915,7 @@ static void DTCSettingOff_02Proc(void) {
 static void Service87Handle(void) {
 	uds_uint8_t SubIndex = 0;
 	uds_uint8_t ValidSub = UDS_FALSE;
+		
 	ServiceSubFunc = UDS_A_Indication_SDU.A_SDU[0] & 0x7f;
 	SuppressPosRspMsgIndicationBit = (UDS_A_Indication_SDU.A_SDU[0] >> 7) & 0x01;
 

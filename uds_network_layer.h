@@ -9,6 +9,10 @@ uds_int8_t UDS_N_init(void);
 uds_int8_t UDS_N_can_data_put(uds_uint32_t id,
 							  uds_uint8_t length,
 							  uds_uint8_t *data);
+//send frame directly for application layer
+uds_int8_t UDS_N_send_frame_direct(uds_uint32_t id,
+								   uds_uint8_t length,
+								   uds_uint8_t *data);
 //get network response service
 uds_uint8_t UDS_N_service_get(UDS_N_Services_t *res,uds_uint8_t *buf);
 //issue a USData.request to network
