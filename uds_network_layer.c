@@ -1049,7 +1049,7 @@ static uds_int8_t UDS_N_rx_ctl_pre_next_BS(void)
 	uds_int8_t ret = 0;
 	UDS_N_Control_t *pnetwork_ctl = &Network_ctl;
 	UDS_N_FC_Para_t *para = &Rx_FC_para;
-	uds_uint8_t wait_rx_frame;
+	uds_uint16_t wait_rx_frame;
 	uds_uint16_t bs = UDS_N_BS_decode(para->BS);
 	
 	wait_rx_frame = pnetwork_ctl->Rx_frame_ctl.Frame_cnt_taget - pnetwork_ctl->Rx_frame_ctl.Frame_cnt_current;
@@ -1074,7 +1074,7 @@ static uds_int8_t UDS_N_tx_ctl_pre_next_BS(void)
 	uds_int8_t ret = 0;
 	UDS_N_Control_t *pnetwork_ctl = &Network_ctl;
 	UDS_N_FC_Para_t *para = &Tx_FC_para;
-	uds_uint8_t wait_tx_frame;
+	uds_uint16_t wait_tx_frame;
 	uds_uint16_t bs = UDS_N_BS_decode(para->BS);
 	
 	wait_tx_frame = pnetwork_ctl->Tx_frame_ctl.Frame_cnt_taget - pnetwork_ctl->Tx_frame_ctl.Frame_cnt_current;
