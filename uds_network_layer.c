@@ -666,11 +666,17 @@ uds_int8_t UDS_N_can_data_put(uds_uint32_t id,
 	Slist *plist = &Put_data_rx_slist;
 
 	if((!tpool) || (!pdata)){
+		if(tpool){
+			UDS_N_pool_pointer_free(N_POOL_TYPE_PDU,tpool);
+		}
 		return ret;
 	}
     //Filted the functional muilt-frame
 	if(UDS_DIAGNOSTICS_FUNCTIONAL_ID == id){
 		if(data[0] & 0xF0){
+			if(tpool){
+				UDS_N_pool_pointer_free(N_POOL_TYPE_PDU,tpool);
+			}
 			return 0;
 		}
 	}
